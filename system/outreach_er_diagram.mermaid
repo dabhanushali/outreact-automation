@@ -1,0 +1,170 @@
+erDiagram
+    BRANDS ||--o{ CAMPAIGNS : "owns"
+    CAMPAIGNS ||--o{ SEARCH_QUERIES : "executes"
+    CAMPAIGNS ||--o{ KEYWORD_VARIATIONS : "defines"
+    CAMPAIGNS ||--o{ LEADS : "generates"
+    CAMPAIGNS ||--o{ DAILY_LIMITS : "tracks"
+    CAMPAIGNS ||--o{ COMPETITOR_BACKLINKS : "discovers"
+    
+    PROSPECTS ||--o{ EMAILS : "has"
+    PROSPECTS ||--o{ LEADS : "becomes"
+    PROSPECTS ||--o{ PROSPECT_VERIFICATION_HISTORY : "verified_by"
+    
+    SEARCH_QUERIES ||--o{ LEADS : "sources"
+    
+    LEADS ||--o{ OUTREACH_HISTORY : "tracks"
+    
+    EMAILS ||--o{ OUTREACH_HISTORY : "used_in"
+
+    BRANDS {
+        int id PK
+        string name UK
+        string website
+        datetime created_at
+    }
+
+    CAMPAIGNS {
+        int id PK
+        int brand_id FK
+        string name
+        string campaign_type "city_search|blog_outreach|competitor_backlink"
+        string target_url
+        int target_da_min
+        int target_da_max
+        string status "active|paused|completed"
+        int daily_limit
+        datetime created_at
+    }
+
+    SEARCH_QUERIES {
+        int id PK
+        int campaign_id FK
+        string query_text
+        string search_engine "google|bing"
+        string location
+        int results_count
+        int processed_count
+        datetime last_executed_at
+        string status "pending|processing|completed|failed|exhausted"
+        string error_message
+        datetime created_at
+    }
+
+    KEYWORD_VARIATIONS {
+        int id PK
+        int campaign_id FK
+        string base_keyword
+        string operator
+        string full_query_template
+        int priority
+        boolean tried
+        int success_count
+        datetime created_at
+    }
+
+    PROSPECTS {
+        int id PK
+        string domain UK
+        string company_name
+        string website_url
+        string city
+        string country
+        int domain_authority
+        string contact_page_url
+        boolean is_verified
+        string verification_method "keyword|ai|manual"
+        int verification_score
+        string verification_reasoning
+        datetime last_checked_at
+        datetime created_at
+    }
+
+    PROSPECT_VERIFICATION_HISTORY {
+        int id PK
+        int prospect_id FK
+        string method "keyword|ai|manual"
+        string decision "yes|no|uncertain"
+        int score
+        string reasoning
+        string verified_by
+        datetime verified_at
+    }
+
+    EMAILS {
+        int id PK
+        int prospect_id FK
+        string email UK
+        string source_page
+        boolean is_domain_match
+        boolean is_generic
+        int confidence
+        string extraction_method "contact_page|footer|about_page|homepage"
+        datetime created_at
+    }
+
+    LEADS {
+        int id PK
+        int campaign_id FK
+        int prospect_id FK
+        int search_query_id FK
+        string status "NEW|VERIFIED|EMAIL_FOUND|READY|OUTREACH_SENT|REPLIED|BOUNCED|REJECTED|SKIPPED"
+        string tier "tier1|tier2"
+        string source_type "google|bing|clutch|goodfirms|ahrefs|semrush|manual"
+        string source_query
+        datetime outreach_sent_at
+        datetime replied_at
+        string notes
+        datetime found_at
+    }
+
+    EXCLUSIONS {
+        int id PK
+        string type "domain|email|company"
+        string value UK
+        string reason
+        string added_by
+        datetime added_at
+    }
+
+    DAILY_LIMITS {
+        string date PK
+        int campaign_id FK
+        int prospects_added
+        int emails_found
+        int outreach_sent
+    }
+
+    OUTREACH_HISTORY {
+        int id PK
+        int lead_id FK
+        int email_id FK
+        string template_used
+        string subject_line
+        datetime sent_at
+        datetime opened_at
+        datetime clicked_at
+        datetime replied_at
+        string bounce_type "hard|soft"
+        string status "sent|delivered|opened|clicked|replied|bounced|failed"
+    }
+
+    COMPETITOR_BACKLINKS {
+        int id PK
+        int campaign_id FK
+        string competitor_domain
+        string backlink_source_url UK
+        string backlink_source_domain
+        string anchor_text
+        int domain_authority
+        datetime discovered_at
+        boolean processed
+    }
+
+    SYSTEM_LOGS {
+        int id PK
+        string log_level "info|warning|error|debug"
+        string module
+        string message
+        string data
+        datetime created_at
+    }

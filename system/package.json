@@ -1,0 +1,21 @@
+{
+  "name": "outreach-system",
+  "version": "1.0.0",
+  "description": "Scalable Backlink Outreach System",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^9.0.0",
+    "dotenv": "^16.3.1",
+    "google-sr": "^2.0.0",
+    "playwright": "^1.40.0"
+  },
+  "devDependencies": {}
+}

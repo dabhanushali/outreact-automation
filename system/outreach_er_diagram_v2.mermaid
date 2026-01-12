@@ -1,0 +1,169 @@
+erDiagram
+    BRANDS ||--o{ CAMPAIGNS : "brand_id"
+    CAMPAIGNS ||--o{ SEARCH_QUERIES : "campaign_id"
+    CAMPAIGNS ||--o{ KEYWORD_VARIATIONS : "campaign_id"
+    CAMPAIGNS ||--o{ LEADS : "campaign_id"
+    CAMPAIGNS ||--o{ DAILY_LIMITS : "campaign_id"
+    CAMPAIGNS ||--o{ COMPETITOR_BACKLINKS : "campaign_id"
+    
+    PROSPECTS ||--o{ EMAILS : "prospect_id"
+    PROSPECTS ||--o{ LEADS : "prospect_id"
+    PROSPECTS ||--o{ PROSPECT_VERIFICATION_HISTORY : "prospect_id"
+    
+    SEARCH_QUERIES ||--o{ LEADS : "search_query_id"
+    
+    LEADS ||--o{ OUTREACH_HISTORY : "lead_id"
+    EMAILS ||--o{ OUTREACH_HISTORY : "email_id"
+
+    BRANDS {
+        INTEGER id PK
+        TEXT name "UK, NOT NULL"
+        TEXT website
+        DATETIME created_at
+    }
+
+    CAMPAIGNS {
+        INTEGER id PK
+        INTEGER brand_id "FK, NOT NULL, IDX"
+        TEXT name "NOT NULL"
+        TEXT campaign_type "CHECK, NOT NULL, IDX"
+        TEXT target_url
+        INTEGER target_da_min "DEFAULT 0"
+        INTEGER target_da_max "DEFAULT 100"
+        TEXT status "CHECK, DEFAULT active, IDX"
+        INTEGER daily_limit "DEFAULT 100"
+        DATETIME created_at
+    }
+
+    SEARCH_QUERIES {
+        INTEGER id PK
+        INTEGER campaign_id "FK, NOT NULL, IDX"
+        TEXT query_text "NOT NULL"
+        TEXT search_engine "CHECK, DEFAULT google"
+        TEXT location
+        INTEGER results_count "DEFAULT 0"
+        INTEGER processed_count "DEFAULT 0"
+        DATETIME last_executed_at
+        TEXT status "CHECK, DEFAULT pending, IDX"
+        TEXT error_message
+        DATETIME created_at
+    }
+
+    KEYWORD_VARIATIONS {
+        INTEGER id PK
+        INTEGER campaign_id "FK, NOT NULL, IDX"
+        TEXT base_keyword "NOT NULL"
+        TEXT operator
+        TEXT full_query_template
+        INTEGER priority "DEFAULT 1"
+        INTEGER tried "CHECK 0-1, DEFAULT 0, IDX"
+        INTEGER success_count "DEFAULT 0"
+        DATETIME created_at
+    }
+
+    PROSPECTS {
+        INTEGER id PK
+        TEXT domain "UK, NOT NULL, IDX"
+        TEXT company_name
+        TEXT website_url
+        TEXT city
+        TEXT country
+        INTEGER domain_authority "IDX"
+        TEXT contact_page_url
+        INTEGER is_verified "CHECK 0-1, DEFAULT 0, IDX"
+        TEXT verification_method "CHECK"
+        INTEGER verification_score
+        TEXT verification_reasoning
+        DATETIME last_checked_at
+        DATETIME created_at
+    }
+
+    PROSPECT_VERIFICATION_HISTORY {
+        INTEGER id PK
+        INTEGER prospect_id "FK, NOT NULL, IDX"
+        TEXT method "CHECK"
+        TEXT decision "CHECK"
+        INTEGER score
+        TEXT reasoning
+        TEXT verified_by
+        DATETIME verified_at "IDX"
+    }
+
+    EMAILS {
+        INTEGER id PK
+        INTEGER prospect_id "FK, NOT NULL, IDX"
+        TEXT email "NOT NULL, IDX"
+        TEXT source_page
+        INTEGER is_domain_match "CHECK 0-1, DEFAULT 1"
+        INTEGER is_generic "CHECK 0-1, DEFAULT 0"
+        INTEGER confidence "DEFAULT 100"
+        TEXT extraction_method "CHECK"
+        DATETIME created_at
+    }
+
+    LEADS {
+        INTEGER id PK
+        INTEGER campaign_id "FK, NOT NULL, IDX, CIDX"
+        INTEGER prospect_id "FK, NOT NULL, IDX"
+        INTEGER search_query_id "FK"
+        TEXT status "CHECK, DEFAULT NEW, IDX"
+        TEXT tier "CHECK, IDX"
+        TEXT source_type "CHECK"
+        TEXT source_query
+        DATETIME outreach_sent_at "IDX"
+        DATETIME replied_at
+        TEXT notes
+        DATETIME found_at "IDX"
+    }
+
+    EXCLUSIONS {
+        INTEGER id PK
+        TEXT type "CHECK, NOT NULL, IDX, CIDX"
+        TEXT value "UK, NOT NULL, IDX"
+        TEXT reason
+        TEXT added_by
+        DATETIME added_at
+    }
+
+    DAILY_LIMITS {
+        TEXT date "CPK, NOT NULL, IDX"
+        INTEGER campaign_id "CPK, FK, NOT NULL, IDX"
+        INTEGER prospects_added "DEFAULT 0"
+        INTEGER emails_found "DEFAULT 0"
+        INTEGER outreach_sent "DEFAULT 0"
+    }
+
+    OUTREACH_HISTORY {
+        INTEGER id PK
+        INTEGER lead_id "FK, NOT NULL, IDX"
+        INTEGER email_id "FK, NOT NULL, IDX"
+        TEXT template_used
+        TEXT subject_line
+        DATETIME sent_at "IDX"
+        DATETIME opened_at
+        DATETIME clicked_at
+        DATETIME replied_at
+        TEXT bounce_type "CHECK"
+        TEXT status "CHECK, DEFAULT sent, IDX"
+    }
+
+    COMPETITOR_BACKLINKS {
+        INTEGER id PK
+        INTEGER campaign_id "FK, NOT NULL"
+        TEXT competitor_domain "NOT NULL"
+        TEXT backlink_source_url "NOT NULL"
+        TEXT backlink_source_domain
+        TEXT anchor_text
+        INTEGER domain_authority
+        DATETIME discovered_at
+        INTEGER processed "CHECK 0-1, DEFAULT 0"
+    }
+
+    SYSTEM_LOGS {
+        INTEGER id PK
+        TEXT log_level "CHECK, IDX"
+        TEXT module
+        TEXT message
+        TEXT data
+        DATETIME created_at "IDX, TRIGGER cleanup"
+    }
