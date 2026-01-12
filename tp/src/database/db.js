@@ -7,8 +7,11 @@ const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
 
 function initSchema() {
-  console.log("Initializing Outreach System Schema...");
+  console.log("Initializing Outreach System Schema (v1.1)...");
 
+  /* =========================
+     BRANDS
+  ========================= */
   db.exec(`
     CREATE TABLE IF NOT EXISTS brands (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,43 +21,56 @@ function initSchema() {
     );
   `);
 
+  /* =========================
+     CAMPAIGNS
+  ========================= */
   db.exec(`
     CREATE TABLE IF NOT EXISTS campaigns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       brand_id INTEGER NOT NULL,
       name TEXT NOT NULL,
       target_url TEXT,
-      keywords TEXT, -- Retaining for InputParser compatibility
+      keywords TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (brand_id) REFERENCES brands(id)
     );
   `);
 
+  /* =========================
+     CAMPAIGN ASSETS (BLOGS / PAGES)
+  ========================= */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS campaign_assets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL,
+      type TEXT CHECK(type IN ('blog','page')) DEFAULT 'blog',
+      title TEXT,
+      url TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (campaign_id) REFERENCES campaigns(id),
+      UNIQUE (campaign_id, url)
+    );
+  `);
+
+  /* =========================
+     PROSPECTS
+  ========================= */
   db.exec(`
     CREATE TABLE IF NOT EXISTS prospects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       domain TEXT NOT NULL UNIQUE,
       company_name TEXT,
-      website_url TEXT, -- Renamed from url to website_url per user schema
+      website_url TEXT,
       city TEXT,
       country TEXT,
+      country_code TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS prospect_verification (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      prospect_id INTEGER NOT NULL,
-      method TEXT CHECK(method IN ('keyword','ai')),
-      decision TEXT CHECK(decision IN ('yes','no')),
-      score INTEGER,
-      reasoning TEXT,
-      verified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (prospect_id) REFERENCES prospects(id)
-    );
-  `);
-
+  /* =========================
+     EMAILS
+  ========================= */
   db.exec(`
     CREATE TABLE IF NOT EXISTS emails (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,20 +85,24 @@ function initSchema() {
     );
   `);
 
+  /* =========================
+     LEADS (Campaign × Prospect)
+  ========================= */
   db.exec(`
     CREATE TABLE IF NOT EXISTS leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      brand_id INTEGER NOT NULL,
       campaign_id INTEGER NOT NULL,
       prospect_id INTEGER NOT NULL,
       status TEXT CHECK(status IN (
         'NEW',
-        'VERIFIED',
-        'EMAIL_FOUND',
         'READY',
         'OUTREACH_SENT',
         'REPLIED',
         'REJECTED'
       )) DEFAULT 'NEW',
+      verification_score INTEGER,
+      verification_reason TEXT,
       source_type TEXT CHECK(source_type IN (
         'google',
         'bing',
@@ -93,12 +113,39 @@ function initSchema() {
       )),
       source_query TEXT,
       found_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (brand_id) REFERENCES brands(id),
       FOREIGN KEY (campaign_id) REFERENCES campaigns(id),
       FOREIGN KEY (prospect_id) REFERENCES prospects(id),
       UNIQUE (campaign_id, prospect_id)
     );
   `);
 
+  /* =========================
+     OUTREACH LOGS (PER BLOG)
+  ========================= */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS outreach_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL,
+      asset_id INTEGER NOT NULL,
+      email_id INTEGER,
+      status TEXT CHECK(status IN (
+        'SENT',
+        'OPENED',
+        'REPLIED',
+        'REJECTED'
+      )) DEFAULT 'SENT',
+      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (lead_id) REFERENCES leads(id),
+      FOREIGN KEY (asset_id) REFERENCES campaign_assets(id),
+      FOREIGN KEY (email_id) REFERENCES emails(id),
+      UNIQUE (lead_id, asset_id)
+    );
+  `);
+
+  /* =========================
+     EXCLUSIONS
+  ========================= */
   db.exec(`
     CREATE TABLE IF NOT EXISTS exclusions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,6 +156,9 @@ function initSchema() {
     );
   `);
 
+  /* =========================
+     DAILY LIMITS
+  ========================= */
   db.exec(`
     CREATE TABLE IF NOT EXISTS daily_limits (
       date TEXT PRIMARY KEY,
@@ -118,16 +168,9 @@ function initSchema() {
     );
   `);
 
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_prospects_domain ON prospects(domain);
-    CREATE INDEX IF NOT EXISTS idx_emails_prospect ON emails(prospect_id);
-    CREATE INDEX IF NOT EXISTS idx_leads_campaign ON leads(campaign_id);
-    CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
-    CREATE INDEX IF NOT EXISTS idx_exclusions_value ON exclusions(value);
-  `);
-
-  console.log("Schema Initialization Complete.");
-
+  /* =========================
+     GEO + KEYWORDS
+  ========================= */
   db.exec(`
     CREATE TABLE IF NOT EXISTS countries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -166,6 +209,20 @@ function initSchema() {
       FOREIGN KEY (city_id) REFERENCES cities(id)
     );
   `);
+
+  /* =========================
+     INDEXES
+  ========================= */
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_prospects_domain ON prospects(domain);
+    CREATE INDEX IF NOT EXISTS idx_emails_prospect ON emails(prospect_id);
+    CREATE INDEX IF NOT EXISTS idx_leads_campaign ON leads(campaign_id);
+    CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+    CREATE INDEX IF NOT EXISTS idx_outreach_lead ON outreach_logs(lead_id);
+    CREATE INDEX IF NOT EXISTS idx_exclusions_value ON exclusions(value);
+  `);
+
+  console.log("Schema Initialization Complete ✅");
 }
 
 export { db, initSchema };
