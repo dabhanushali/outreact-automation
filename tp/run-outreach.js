@@ -2,12 +2,14 @@
  * Backlink Outreach System - Main Entry Point
  *
  * Usage:
- *   node run-outreach.js                    - Interactive mode
- *   node run-outreach.js --mode city        - City search mode
- *   node run-outreach.js --mode directory   - Directory scraping mode
- *   node run-outreach.js --mode queries     - Search queries from DB
- *   node run-outreach.js --stats            - Show daily stats
- *   node run-outreach.js --reset            - Reset daily stats
+ *   node run-outreach.js                      - Interactive mode
+ *   node run-outreach.js --mode city           - City search mode
+ *   node run-outreach.js --mode directory      - Directory scraping mode
+ *   node run-outreach.js --mode queries        - Search queries from DB
+ *   node run-outreach.js --mode blog           - Blog discovery mode
+ *   node run-outreach.js --mode extract-emails - Email extraction mode
+ *   node run-outreach.js --stats               - Show daily stats
+ *   node run-outreach.js --reset               - Reset daily stats
  */
 
 import { initSchema, db } from "./src/database/db.js";
@@ -65,12 +67,14 @@ async function main() {
 
     // Show breakdown by status
     const statusBreakdown = db
-      .prepare(`
+      .prepare(
+        `
         SELECT status, COUNT(*) as count
         FROM leads
         WHERE DATE(found_at) = DATE('now')
         GROUP BY status
-      `)
+      `
+      )
       .all();
 
     console.log(`\nLeads Added Today by Status:`);
@@ -82,7 +86,9 @@ async function main() {
 
   // 3. Handle reset command
   if (resetFlag) {
-    const confirm = await question("Are you sure you want to reset today's stats? (yes/no): ");
+    const confirm = await question(
+      "Are you sure you want to reset today's stats? (yes/no): "
+    );
     if (confirm.toLowerCase() === "yes") {
       DailyLimitService.resetToday();
     } else {
@@ -94,7 +100,9 @@ async function main() {
   // 4. Parse input files (for brands/campaigns)
   const docsDir = path.resolve("d:/OutReach/docs");
   try {
-    InputParser.parseBlogSpecific(path.join(docsDir, "blog-specific approach.md"));
+    InputParser.parseBlogSpecific(
+      path.join(docsDir, "blog-specific approach.md")
+    );
     InputParser.parseGeneral(path.join(docsDir, "general approach.md"));
   } catch (e) {
     console.log("Note: Input parsing skipped (files may not exist)");
@@ -133,12 +141,14 @@ async function main() {
   1. City Search Mode          - Search Google for "software development [city]"
   2. Directory Scraping Mode   - Scrape Clutch.co / GoodFirms listings
   3. Database Queries Mode     - Use search_queries from database
-  4. Show Daily Stats
-  5. Exit
+  4. Blog Discovery Mode       - Search for campaign-specific blog assets
+  5. Extract Emails           - Extract emails for newly added prospects
+  6. Show Daily Stats
+  7. Exit
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `);
 
-    mode = await question("Enter choice (1-5): ");
+    mode = await question("Enter choice (1-7): ");
   }
 
   try {
@@ -188,13 +198,17 @@ async function main() {
             dirUrls = allDirs.clutch.filter((u) => u.includes("/us/"));
             break;
           case "3":
-            dirUrls = allDirs.clutch.filter((u) => u.includes(".uk") || u.includes("/uk/"));
+            dirUrls = allDirs.clutch.filter(
+              (u) => u.includes(".uk") || u.includes("/uk/")
+            );
             break;
           case "4":
             dirUrls = allDirs.clutch.filter((u) => u.includes("/ca/"));
             break;
           case "5":
-            dirUrls = allDirs.clutch.filter((u) => u.includes(".au") || u.includes("/au/"));
+            dirUrls = allDirs.clutch.filter(
+              (u) => u.includes(".au") || u.includes("/au/")
+            );
             break;
           case "6":
             dirUrls = allDirs.goodfirms.filter((u) => u.includes("/india/"));
@@ -224,22 +238,40 @@ async function main() {
         }
 
         console.log(`\nWill scrape ${dirUrls.length} directory page(s)...`);
-        await OutreachOrchestrator.runDirectoryScraping(dirUrls, brandId, campaignId);
+        await OutreachOrchestrator.runDirectoryScraping(
+          dirUrls,
+          brandId,
+          campaignId
+        );
         break;
 
       case "3":
       case "queries":
         // Database Queries Mode
-        const limit = await question("How many queries to process? (default: 10): ") || "10";
+        const limit =
+          (await question("How many queries to process? (default: 10): ")) ||
+          "10";
         await OutreachOrchestrator.runFromSearchQueries(parseInt(limit));
         break;
 
       case "4":
+      case "blog":
+        // Blog Specific Discovery Mode
+        await OutreachOrchestrator.runBlogDiscovery();
+        break;
+
+      case "5":
+      case "extract-emails":
+        // Email Extraction Mode
+        await OutreachOrchestrator.extractEmailsForNewProspects();
+        break;
+
+      case "6":
       case "stats":
         DailyLimitService.printStats();
         break;
 
-      case "5":
+      case "7":
       case "exit":
         console.log("Goodbye!");
         break;

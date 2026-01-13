@@ -7,7 +7,7 @@ const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
 
 function initSchema() {
-  console.log("Initializing Outreach System Schema (v1.1)...");
+  console.log("Initializing Outreach System Schema (v1.2)...");
 
   /* =========================
      BRANDS
@@ -64,6 +64,21 @@ function initSchema() {
       city TEXT,
       country TEXT,
       country_code TEXT,
+      last_source_type TEXT CHECK(last_source_type IN (
+        'google',
+        'bing',
+        'clutch',
+        'goodfirms',
+        'ahrefs',
+        'semrush',
+        'blog',
+        'techreviewer',
+        'directory',
+        'other'
+      )),
+      last_source_query TEXT,
+      prospect_type TEXT CHECK(prospect_type IN ('company', 'blog')) DEFAULT 'company',
+      emails_extracted BOOLEAN DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -109,7 +124,11 @@ function initSchema() {
         'clutch',
         'goodfirms',
         'ahrefs',
-        'semrush'
+        'semrush',
+        'blog',
+        'techreviewer',
+        'directory',
+        'other'
       )),
       source_query TEXT,
       found_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -164,12 +183,13 @@ function initSchema() {
       date TEXT PRIMARY KEY,
       prospects_added INTEGER DEFAULT 0,
       emails_found INTEGER DEFAULT 0,
+      blog_assets_found INTEGER DEFAULT 0,
       outreach_sent INTEGER DEFAULT 0
     );
   `);
 
   /* =========================
-     GEO + KEYWORDS
+     GEO + KEYWORDS + MODIFIERS
   ========================= */
   db.exec(`
     CREATE TABLE IF NOT EXISTS countries (
@@ -193,6 +213,16 @@ function initSchema() {
     CREATE TABLE IF NOT EXISTS outreach_keywords (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       phrase TEXT NOT NULL UNIQUE,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // --- NEW TABLE ADDED HERE ---
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS search_modifiers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT CHECK(category IN ('guest_post', 'resource', 'link_submission', 'listicle')) NOT NULL,
+      modifier TEXT NOT NULL UNIQUE,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -223,6 +253,170 @@ function initSchema() {
   `);
 
   console.log("Schema Initialization Complete ✅");
+
+  /* =========================
+     POPULATE INITIAL DATA
+  ========================= */
+  populateInitialData();
+}
+
+function populateInitialData() {
+  console.log("Populating initial data...");
+
+  // Check if data already exists
+  const countryCount = db
+    .prepare("SELECT COUNT(*) as count FROM countries")
+    .get().count;
+  if (countryCount > 0) {
+    console.log("  Initial data already exists, skipping...");
+    return;
+  }
+
+  // 1. Insert Countries
+  const countries = [
+    "India",
+    "United States",
+    "United Kingdom",
+    "Canada",
+    "Germany",
+    "Australia",
+    "France",
+  ];
+
+  const insertCountry = db.prepare("INSERT INTO countries (name) VALUES (?)");
+  const countryIds = {};
+  for (const country of countries) {
+    const info = insertCountry.run(country);
+    countryIds[country] = info.lastInsertRowid;
+  }
+  console.log(`  ✓ Inserted ${countries.length} countries`);
+
+  // 2. Insert Cities
+  const citiesByCountry = {
+    India: [
+      "Bangalore",
+      "Hyderabad",
+      "Chennai",
+      "Pune",
+      "Mumbai",
+      "Noida",
+      "Kolkata",
+      "Ahmedabad",
+      "Chandigarh",
+    ],
+    "United States": [
+      "San Francisco Bay Area",
+      "New York City",
+      "Seattle",
+      "Austin",
+      "Los Angeles",
+      "Boston",
+      "Chicago",
+      "Washington DC",
+    ],
+    "United Kingdom": [
+      "London",
+      "Manchester",
+      "Birmingham",
+      "Edinburgh",
+      "Leeds",
+      "Bristol",
+    ],
+    Canada: ["Toronto", "Vancouver", "Montreal", "Ottawa", "Calgary"],
+    Germany: ["Berlin", "Munich", "Hamburg", "Frankfurt", "Stuttgart"],
+    Australia: ["Sydney", "Melbourne", "Brisbane", "Perth", "Adelaide"],
+    France: ["Paris", "Lyon", "Toulouse", "Nantes", "Bordeaux"],
+  };
+
+  const insertCity = db.prepare(
+    "INSERT INTO cities (country_id, name) VALUES (?, ?)"
+  );
+  const cityIds = {};
+  for (const [country, cities] of Object.entries(citiesByCountry)) {
+    const countryId = countryIds[country];
+    for (const city of cities) {
+      const info = insertCity.run(countryId, city);
+      const key = `${city}_${country}`;
+      cityIds[key] = info.lastInsertRowid;
+    }
+  }
+  console.log(`  ✓ Inserted ${Object.keys(cityIds).length} cities`);
+
+  // 3. Insert Outreach Keywords
+  const keywords = [
+    "software development company",
+    "IT services company",
+    "custom software development",
+    "software app development",
+    "enterprise software development",
+    "mobile app development",
+    "web app development",
+    "IT consulting company",
+    "technology development company",
+    "software development firms",
+  ];
+
+  const insertKeyword = db.prepare(
+    "INSERT INTO outreach_keywords (phrase) VALUES (?)"
+  );
+  const keywordIds = {};
+  for (const keyword of keywords) {
+    const info = insertKeyword.run(keyword);
+    keywordIds[keyword] = info.lastInsertRowid;
+  }
+  console.log(`  ✓ Inserted ${keywords.length} keywords`);
+
+  // 4. Insert Search Modifiers (NEW SECTION)
+  const modifiers = [
+    {
+      category: "guest_post",
+      text: '("write for us" OR "guest post" OR "submit article" OR "contributor")',
+    },
+    {
+      category: "resource",
+      text: '("resources" OR "useful links" OR "reading list" OR "recommended")',
+    },
+    {
+      category: "link_submission",
+      text: '("suggest a resource" OR "submit a resource" OR "add your link")',
+    },
+    {
+      category: "listicle",
+      text: '("top" OR "best" OR "tools" OR "companies" OR "agencies") + 2025',
+    },
+  ];
+
+  const insertModifier = db.prepare(
+    "INSERT INTO search_modifiers (category, modifier) VALUES (?, ?)"
+  );
+
+  for (const mod of modifiers) {
+    insertModifier.run(mod.category, mod.text);
+  }
+  console.log(`  ✓ Inserted ${modifiers.length} search modifiers`);
+
+  // 5. Generate Search Queries (Keyword + City)
+  const insertQuery = db.prepare(
+    "INSERT INTO search_queries (keyword_id, city_id, query) VALUES (?, ?, ?)"
+  );
+  const insertMany = db.transaction((qs) => {
+    for (const q of qs) {
+      insertQuery.run(q.keywordId, q.cityId, q.query);
+    }
+  });
+
+  const queries = [];
+  for (const [keyword, keywordId] of Object.entries(keywordIds)) {
+    for (const [cityKey, cityId] of Object.entries(cityIds)) {
+      const cityName = cityKey.split("_")[0];
+      const query = `${keyword} ${cityName}`;
+      queries.push({ keywordId, cityId, query });
+    }
+  }
+
+  insertMany(queries);
+  console.log(`  ✓ Generated ${queries.length} search queries`);
+  console.log("Initial data population complete ✅");
 }
 
 export { db, initSchema };

@@ -2,10 +2,11 @@ import { db } from "../database/db.js";
 
 /**
  * Daily Limit Service
- * Tracks and enforces daily limits for prospect/email collection
+ * Tracks and enforces daily limits for prospect/email/blog asset collection
  */
 export class DailyLimitService {
-  static DAILY_LIMIT = 100; // Target: 100 companies per day
+  static DAILY_PROSPECT_LIMIT = 100; // Target: 100 companies per day
+  static DAILY_BLOG_LIMIT = 100; // Target: 100 blog assets per day (same as prospects)
 
   /**
    * Get today's date string
@@ -22,7 +23,7 @@ export class DailyLimitService {
   static ensureTodayRecord() {
     const today = this.getToday();
     const stmt = db.prepare(
-      "INSERT OR IGNORE INTO daily_limits (date, prospects_added, emails_found, outreach_sent) VALUES (?, 0, 0, 0)"
+      "INSERT OR IGNORE INTO daily_limits (date, prospects_added, emails_found, blog_assets_found, outreach_sent) VALUES (?, 0, 0, 0, 0)"
     );
     stmt.run(today);
   }
@@ -67,30 +68,79 @@ export class DailyLimitService {
   }
 
   /**
-   * Check if daily limit reached
-   * @returns {boolean} - True if limit reached
+   * Increment blog assets found count
+   * @returns {number} - New count
    */
-  static isLimitReached() {
-    const stats = this.getTodayStats();
-    return stats.prospects_added >= this.DAILY_LIMIT;
+  static incrementBlogAssets() {
+    this.ensureTodayRecord();
+    const today = this.getToday();
+    const stmt = db.prepare(
+      "UPDATE daily_limits SET blog_assets_found = blog_assets_found + 1 WHERE date = ?"
+    );
+    stmt.run(today);
+    return this.getTodayStats().blog_assets_found;
   }
 
   /**
-   * Get remaining count for today
+   * Check if prospect daily limit reached
+   * @returns {boolean} - True if limit reached
+   */
+  static isProspectLimitReached() {
+    const stats = this.getTodayStats();
+    return stats.prospects_added >= this.DAILY_PROSPECT_LIMIT;
+  }
+
+  /**
+   * Check if blog asset daily limit reached
+   * @returns {boolean} - True if limit reached
+   */
+  static isBlogLimitReached() {
+    const stats = this.getTodayStats();
+    return stats.blog_assets_found >= this.DAILY_BLOG_LIMIT;
+  }
+
+  /**
+   * Check if any daily limit reached (legacy method for backward compatibility)
+   * @returns {boolean} - True if any limit reached
+   */
+  static isLimitReached() {
+    return this.isProspectLimitReached() || this.isBlogLimitReached();
+  }
+
+  /**
+   * Get remaining prospect count for today
    * @returns {number} - Remaining prospects that can be added
    */
   static getRemaining() {
     const stats = this.getTodayStats();
-    return Math.max(0, this.DAILY_LIMIT - stats.prospects_added);
+    return Math.max(0, this.DAILY_PROSPECT_LIMIT - stats.prospects_added);
   }
 
   /**
-   * Get progress percentage
+   * Get remaining blog asset count for today
+   * @returns {number} - Remaining blog assets that can be added
+   */
+  static getBlogRemaining() {
+    const stats = this.getTodayStats();
+    return Math.max(0, this.DAILY_BLOG_LIMIT - stats.blog_assets_found);
+  }
+
+  /**
+   * Get prospect progress percentage
    * @returns {number} - Progress (0-100)
    */
   static getProgress() {
     const stats = this.getTodayStats();
-    return Math.min(100, Math.round((stats.prospects_added / this.DAILY_LIMIT) * 100));
+    return Math.min(100, Math.round((stats.prospects_added / this.DAILY_PROSPECT_LIMIT) * 100));
+  }
+
+  /**
+   * Get blog asset progress percentage
+   * @returns {number} - Progress (0-100)
+   */
+  static getBlogProgress() {
+    const stats = this.getTodayStats();
+    return Math.min(100, Math.round((stats.blog_assets_found / this.DAILY_BLOG_LIMIT) * 100));
   }
 
   /**
@@ -100,14 +150,17 @@ export class DailyLimitService {
     const stats = this.getTodayStats();
     const remaining = this.getRemaining();
     const progress = this.getProgress();
+    const blogRemaining = this.getBlogRemaining();
+    const blogProgress = this.getBlogProgress();
 
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`           DAILY LIMIT STATS (${stats.date})          `);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`  Prospects Added:    ${stats.prospects_added}/${this.DAILY_LIMIT}`);
+    console.log(`  Prospects Added:    ${stats.prospects_added}/${this.DAILY_PROSPECT_LIMIT}`);
     console.log(`  Emails Found:       ${stats.emails_found}`);
-    console.log(`  Progress:           ${progress}%`);
-    console.log(`  Remaining:          ${remaining}`);
+    console.log(`  Blog Assets Found:  ${stats.blog_assets_found}/${this.DAILY_BLOG_LIMIT}`);
+    console.log(`  Progress:           ${progress}% (prospects), ${blogProgress}% (blogs)`);
+    console.log(`  Remaining:          ${remaining} prospects, ${blogRemaining} blogs`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
   }
 
@@ -118,7 +171,7 @@ export class DailyLimitService {
     const today = this.getToday();
     this.ensureTodayRecord();
     const stmt = db.prepare(
-      "UPDATE daily_limits SET prospects_added = 0, emails_found = 0, outreach_sent = 0 WHERE date = ?"
+      "UPDATE daily_limits SET prospects_added = 0, emails_found = 0, blog_assets_found = 0, outreach_sent = 0 WHERE date = ?"
     );
     stmt.run(today);
     console.log(`Reset stats for ${today}`);

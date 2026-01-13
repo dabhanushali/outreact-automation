@@ -1,4 +1,8 @@
-import playwright from "playwright";
+import { chromium } from "playwright-extra";
+import stealthPlugin from "puppeteer-extra-plugin-stealth";
+
+// Add stealth plugin
+chromium.use(stealthPlugin());
 
 /**
  * Directory Scraper Service
@@ -12,9 +16,9 @@ export class DirectoryScraperService {
    * Initialize browser with anti-detection settings
    */
   static async init() {
-    if (this.browser) return this.browser;
+    if (this.browser && this.browser.isConnected()) return this.browser;
 
-    this.browser = await playwright.chromium.launch({
+    this.browser = await chromium.launch({
       headless: true,
       args: [
         "--disable-blink-features=AutomationControlled",
@@ -43,25 +47,64 @@ export class DirectoryScraperService {
       },
     });
 
-    // Inject stealth scripts to hide playwright traces
-    await this.context.addInitScript(() => {
-      // Hide webdriver property
-      Object.defineProperty(navigator, "webdriver", {
-        get: () => false,
-      });
-
-      // Mock plugins
-      Object.defineProperty(navigator, "plugins", {
-        get: () => [1, 2, 3, 4, 5],
-      });
-
-      // Mock languages
-      Object.defineProperty(navigator, "languages", {
-        get: () => ["en-US", "en"],
-      });
-    });
-
     return this.browser;
+  }
+
+  /**
+   * Resolves a directory redirect URL to the final destination
+   * @param {string} url - The redirect URL
+   * @returns {Promise<string>} - The resolved final URL
+   */
+  static async resolveWebsiteUrl(url) {
+    if (!url || !url.startsWith("http")) return url;
+
+    // Clutch redirects often have the target URL in the 'u' parameter
+    if (url.includes("r.clutch.co") || url.includes("ppc.clutch.co")) {
+      try {
+        const urlObj = new URL(url);
+        const target =
+          urlObj.searchParams.get("u") ||
+          urlObj.searchParams.get("provider_website");
+        if (target) {
+          // Decode URL if necessary
+          const decoded = target.startsWith("http")
+            ? target
+            : `http://${target}`;
+          return decoded.split("?")[0]; // Clean UTM if wanted, but standard is often safer
+        }
+      } catch (e) {
+        // Fallback to following if decoding fails
+      }
+    }
+
+    // For GoodFirms or if Clutch extraction failed, follow the redirect
+    if (url.includes("goodfirms.co") || url.includes("clutch.co")) {
+      await this.init();
+      const page = await this.context.newPage();
+      try {
+        // We only care about the final URL, so we can stop as soon as we land
+        const response = await page.goto(url, {
+          waitUntil: "domcontentloaded",
+          timeout: 20000,
+        });
+        const finalUrl = page.url();
+        // Skip if still on the directory
+        if (
+          finalUrl.includes("clutch.co") ||
+          finalUrl.includes("goodfirms.co")
+        ) {
+          return url.split("?")[0];
+        }
+        return finalUrl.split("?")[0];
+      } catch (e) {
+        return url.split("?")[0];
+      } finally {
+        await page.close();
+      }
+    }
+
+    // Proactively clean UTM for any URL
+    return url.split("?")[0];
   }
 
   /**
@@ -151,7 +194,7 @@ export class DirectoryScraperService {
 
       // For companies without website URLs, visit their profile pages
       const companies = [];
-      const profilePage = await this.context.newPage();
+      let profilePage = await this.context.newPage();
 
       for (const listing of listings) {
         try {
@@ -162,201 +205,164 @@ export class DirectoryScraperService {
             // Need to visit profile page to get website
             console.log(`    Visiting profile: ${listing.companyName}`);
 
-            await profilePage.goto(listing.profileUrl, {
-              waitUntil: "domcontentloaded",
-              timeout: 20000,
-            });
+            try {
+              // Ensure browser, context and page are valid
+              try {
+                if (
+                  !this.browser ||
+                  !this.browser.isConnected() ||
+                  !this.context
+                ) {
+                  await this.init();
+                  profilePage = await this.context.newPage();
+                } else if (
+                  profilePage.isClosed() ||
+                  (this.context && !this.context.pages().includes(profilePage))
+                ) {
+                  profilePage = await this.context.newPage();
+                }
+              } catch (resurrectionError) {
+                console.log(
+                  `      ⚠ Critical session failure, restarting browser: ${resurrectionError.message}`
+                );
+                this.browser = null; // Force init to create new browser
+                await this.init();
+                profilePage = await this.context.newPage();
+              }
 
-            // Wait for content to load
+              await profilePage.goto(listing.profileUrl, {
+                waitUntil: "domcontentloaded",
+                timeout: 30000,
+              });
+
+              // Sanity Check: Ensure we are on a real profile page
+              const isRealProfile = await profilePage
+                .waitForSelector("#profile-summary, .profile-header", {
+                  timeout: 10000,
+                })
+                .then(() => true)
+                .catch(() => false);
+
+              if (!isRealProfile) {
+                console.log(
+                  `      ⚠ Blocked or invalid profile page for ${listing.companyName}`
+                );
+                const isBlocked = await profilePage.evaluate(
+                  () =>
+                    document.title.includes("Cloudflare") ||
+                    document.title.includes("Just a moment")
+                );
+                if (isBlocked) {
+                  console.log(`      ✗ Cloudflare block detected. skipping.`);
+                  continue;
+                }
+              }
+            } catch (gotoError) {
+              console.log(`      ✗ Navigation error: ${gotoError.message}`);
+              if (gotoError.message.includes("closed")) {
+                profilePage = await this.context.newPage();
+              }
+              continue;
+            }
+
+            // Wait for dynamic content
             await profilePage.waitForTimeout(2000);
 
-            // Try to find and click the "Visit Website" button using Playwright locators
+            // Improved Extraction Methods for Clutch Profile Page
             let websiteUrl = null;
-
-            // Method 1: Try to find link with "Visit" text followed by company name
             try {
-              const visitButton = profilePage.getByRole("link", {
-                name: new RegExp(`visit ${listing.companyName}`, "i"),
-              });
-              if ((await visitButton.count()) > 0) {
-                const href = await visitButton.first().getAttribute("href");
-                if (
-                  href &&
-                  !href.includes("clutch.co") &&
-                  !href.includes("ppc.clutch.co")
-                ) {
-                  websiteUrl = href;
-                }
-              }
-            } catch (e) {
-              // Continue to next method
-            }
-
-            // Method 2: Try to find any link with "Visit Website" text
-            if (!websiteUrl) {
-              try {
-                const visitWebsiteButton = profilePage.getByRole("link", {
-                  name: /visit website/i,
-                });
-                if ((await visitWebsiteButton.count()) > 0) {
-                  // Get all matching links
-                  const buttons = await visitWebsiteButton.all();
-                  for (const button of buttons) {
-                    const href = await button.getAttribute("href");
-                    // Skip redirect URLs
-                    if (
-                      href &&
-                      !href.includes("clutch.co") &&
-                      !href.includes("ppc.clutch.co") &&
-                      !href.includes("r.clutch.co") &&
-                      !href.includes("g.clutch.co")
-                    ) {
-                      websiteUrl = href;
-                      break;
-                    }
-                  }
-                }
-              } catch (e) {
-                // Continue to next method
-              }
-            }
-
-            // Method 3: Try to find button with role="button" containing "Visit"
-            if (!websiteUrl) {
-              try {
-                const visitButtons = await profilePage
-                  .getByRole("button", { name: /Visit/i })
-                  .all();
-                for (const button of visitButtons) {
-                  // Check if clicking this button would navigate (has onclick or form parent)
-                  const onclick = await button.getAttribute("onclick");
-                  if (onclick) {
-                    // Try to extract URL from onclick
-                    const urlMatch = onclick.match(/https?:\/\/[^"'`]+/);
-                    if (urlMatch && !urlMatch[0].includes("clutch.co")) {
-                      websiteUrl = urlMatch[0];
-                      break;
-                    }
-                  }
-                }
-              } catch (e) {
-                // Continue
-              }
-            }
-
-            // Method 4: Try to find by text content "Visit" or "Website" in link role
-            if (!websiteUrl) {
-              try {
-                const links = await profilePage.getByRole("link").all();
-                for (const link of links) {
-                  const href = await link.getAttribute("href");
-                  const text = await link.textContent();
-
-                  // Skip clutch/goodfirms
-                  if (
-                    !href ||
-                    href.includes("clutch.co") ||
-                    href.includes("goodfirms")
-                  ) {
-                    continue;
-                  }
-
-                  // Check for redirect URLs
-                  if (
-                    href.includes("ppc.clutch.co") ||
-                    href.includes("r.clutch.co") ||
-                    href.includes("g.clutch.co")
-                  ) {
-                    continue;
-                  }
-
-                  // Look for "visit" or "website" in text
-                  const lowerText = text?.toLowerCase() || "";
-                  if (
-                    lowerText.includes("visit") ||
-                    lowerText.includes("website")
-                  ) {
-                    websiteUrl = href;
-                    break;
-                  }
-                }
-              } catch (e) {
-                // Continue
-              }
-            }
-
-            // Method 5: Try getByText for "Visit" or "Website"
-            if (!websiteUrl) {
-              try {
-                const visitText = profilePage.getByText(/visit\s+website/i);
-                if ((await visitText.count()) > 0) {
-                  // Find the closest anchor element
-                  const element = await visitText.first();
-                  const href = await element.evaluate((el) => {
-                    const closest = el.closest("a");
-                    return closest ? closest.href : null;
-                  });
-                  if (href && !href.includes("clutch.co")) {
-                    websiteUrl = href;
-                  }
-                }
-              } catch (e) {
-                // Continue
-              }
-            }
-
-            // Method 6: Fallback - look for any external link in the website/contact section
-            if (!websiteUrl) {
               websiteUrl = await profilePage.evaluate(() => {
-                const allLinks = Array.from(
-                  document.querySelectorAll("a[href]")
-                );
-                for (const link of allLinks) {
+                const links = Array.from(document.querySelectorAll("a[href]"));
+                const forbiddenDomains = [
+                  "facebook.com",
+                  "linkedin.com",
+                  "twitter.com",
+                  "instagram.com",
+                  "google.com",
+                  "youtube.com",
+                  "pinterest.com",
+                  "cloudflare.com",
+                  "captcha",
+                  "challenge-platform",
+                  "x.com",
+                  "apple.com",
+                  "microsoft.com",
+                  "hsforms.com",
+                  "hubspot.com",
+                  "typeform.com",
+                  "calendly.com",
+                  "zoom.us",
+                  "googletagmanager.com",
+                ];
+
+                const isInternal = (href) => {
+                  const url = href.toLowerCase();
+                  if (
+                    url.includes("r.clutch.co") ||
+                    url.includes("ppc.clutch.co")
+                  )
+                    return false;
+                  if (
+                    url.includes("clutch.co") ||
+                    url.includes("goodfirms.co") ||
+                    url.includes("goodfirms.com")
+                  )
+                    return true;
+                  return false;
+                };
+
+                // First pass: Look for high-intent "Visit Website" links or buttons
+                for (const link of links) {
                   const href = link.href;
                   const text = (link.textContent || "").toLowerCase();
                   const className = (link.className || "").toLowerCase();
 
-                  // Skip clutch/goodfirms links
                   if (
-                    href.includes("clutch.co") ||
-                    href.includes("goodfirms")
+                    isInternal(href) ||
+                    forbiddenDomains.some((domain) => href.includes(domain))
                   ) {
                     continue;
                   }
 
-                  // Must be a proper http/https link
+                  // Check for high-intent patterns
                   if (
-                    !href.startsWith("http://") &&
-                    !href.startsWith("https://")
+                    text.includes("visit website") ||
+                    text.includes("visit site") ||
+                    text.includes("go to website") ||
+                    className.includes("visit-website") ||
+                    className.includes("website-link") ||
+                    className.includes("visit-site") ||
+                    link.querySelector(".icon-globe") ||
+                    link.querySelector("path[d*='M12 2C6.48 2 2 6.48 2 12']")
                   ) {
-                    continue;
+                    return href;
                   }
+                }
 
-                  // Skip javascript and anchor links
-                  if (href.includes("javascript:") || href.includes("#")) {
-                    continue;
-                  }
+                // Second pass: Fallback to any external-looking business link
+                for (const link of links) {
+                  const href = link.href;
 
-                  // Check if it looks like a website link
                   if (
-                    text.includes("visit") ||
-                    text.includes("website") ||
-                    className.includes("btn") ||
-                    className.includes("button") ||
-                    className.includes("visit") ||
-                    className.includes("website")
+                    href.startsWith("http") &&
+                    !isInternal(href) &&
+                    !forbiddenDomains.some((domain) => href.includes(domain))
                   ) {
                     return href;
                   }
                 }
                 return null;
               });
+            } catch (extractionError) {
+              console.log(
+                `      ✗ Extraction error: ${extractionError.message}`
+              );
             }
 
             if (websiteUrl) {
               companies.push({
                 ...listing,
-                websiteUrl,
+                websiteUrl: await this.resolveWebsiteUrl(websiteUrl),
               });
               console.log(`      ✓ Found website: ${websiteUrl}`);
             } else {
@@ -419,7 +425,7 @@ export class DirectoryScraperService {
 
       // Wait for listings to load
       await page
-        .waitForSelector(".firm-list, .listing, .company-card", {
+        .waitForSelector(".firm-list, .listing, .company-card, .firm-wrapper", {
           timeout: 10000,
         })
         .catch(() => {});
@@ -430,7 +436,7 @@ export class DirectoryScraperService {
 
         // Try multiple selectors for GoodFirms listings
         const containers = document.querySelectorAll(
-          ".firm-listing, .listing-item, .company-card, .firm-card"
+          ".firm-listing, .listing-item, .company-card, .firm-card, .firm-wrapper"
         );
 
         for (const container of containers) {
@@ -440,6 +446,7 @@ export class DirectoryScraperService {
               container.querySelector("h3 a") ||
               container.querySelector(".firm-name a") ||
               container.querySelector(".company-name a") ||
+              container.querySelector(".visit-profile") ||
               container.querySelector("a[href*='/profile/']");
             const name = nameEl?.textContent?.trim() || "";
 
@@ -477,37 +484,150 @@ export class DirectoryScraperService {
 
       // For companies without website URLs, visit their profile pages
       const companies = [];
-      const profilePage = await this.context.newPage();
+      let profilePage = await this.context.newPage();
 
       for (const listing of listings) {
         try {
-          if (listing.websiteUrl) {
+          // Recreate page if it was closed
+          if (
+            profilePage.isClosed() ||
+            (this.context && !this.context.pages().includes(profilePage))
+          ) {
+            profilePage = await this.context.newPage();
+          }
+
+          if (listing.websiteUrl && !listing.websiteUrl.includes("goodfirms")) {
             // Already have website URL
             companies.push(listing);
           } else if (listing.profileUrl) {
             // Need to visit profile page to get website
             console.log(`    Visiting profile: ${listing.companyName}`);
 
-            await profilePage.goto(listing.profileUrl, {
-              waitUntil: "domcontentloaded",
-              timeout: 15000,
-            });
+            try {
+              // Ensure browser, context and page are valid
+              try {
+                if (
+                  !this.browser ||
+                  !this.browser.isConnected() ||
+                  !this.context
+                ) {
+                  await this.init();
+                  profilePage = await this.context.newPage();
+                } else if (
+                  profilePage.isClosed() ||
+                  (this.context && !this.context.pages().includes(profilePage))
+                ) {
+                  profilePage = await this.context.newPage();
+                }
+              } catch (resurrectionError) {
+                console.log(
+                  `      ⚠ Critical session failure, restarting browser: ${resurrectionError.message}`
+                );
+                this.browser = null; // Force init to create new browser
+                await this.init();
+                profilePage = await this.context.newPage();
+              }
+
+              await profilePage.goto(listing.profileUrl, {
+                waitUntil: "domcontentloaded",
+                timeout: 30000,
+              });
+
+              // Sanity Check for GoodFirms
+              const isRealProfile = await profilePage
+                .waitForSelector(
+                  ".firm-overview, .profile-header, .firm-vitals",
+                  { timeout: 10000 }
+                )
+                .then(() => true)
+                .catch(() => false);
+
+              if (!isRealProfile) {
+                console.log(
+                  `      ⚠ Blocked or invalid profile page for ${listing.companyName}`
+                );
+                const isBlocked = await profilePage.evaluate(
+                  () =>
+                    document.title.includes("Cloudflare") ||
+                    document.title.includes("Just a moment")
+                );
+                if (isBlocked) {
+                  console.log(`      ✗ Cloudflare block detected. skipping.`);
+                  continue;
+                }
+              }
+            } catch (gotoError) {
+              console.log(`      ✗ Navigation error: ${gotoError.message}`);
+              if (gotoError.message.includes("closed")) {
+                profilePage = await this.context.newPage();
+              }
+              continue;
+            }
 
             // Extract website URL from profile page
             const websiteUrl = await profilePage.evaluate(() => {
-              // Look for website link with multiple selectors
-              const selectors = [
-                "a.website-link",
-                "a[href*='http']:not([href*='goodfirms'])",
-                ".firm-website a",
-                "a.visit-website",
-                ".firm-overview a[href]",
+              const links = Array.from(document.querySelectorAll("a[href]"));
+              const forbiddenDomains = [
+                "facebook.com",
+                "linkedin.com",
+                "twitter.com",
+                "instagram.com",
+                "google.com",
+                "youtube.com",
+                "pinterest.com",
+                "cloudflare.com",
+                "captcha",
+                "x.com",
+                "hsforms.com",
+                "hubspot.com",
+                "typeform.com",
+                "calendly.com",
+                "zoom.us",
+                "googletagmanager.com",
               ];
 
-              for (const selector of selectors) {
-                const el = document.querySelector(selector);
-                if (el && el.href && !el.href.includes("goodfirms")) {
-                  return el.href;
+              const isInternal = (href) => {
+                const url = href.toLowerCase();
+                if (
+                  url.includes("goodfirms.co") ||
+                  url.includes("goodfirms.com") ||
+                  url.includes("clutch.co")
+                )
+                  return true;
+                return false;
+              };
+
+              for (const link of links) {
+                const href = link.href;
+                const text = (link.textContent || "").toLowerCase();
+                const className = (link.className || "").toLowerCase();
+
+                if (
+                  isInternal(href) ||
+                  forbiddenDomains.some((domain) => href.includes(domain))
+                )
+                  continue;
+
+                if (
+                  text.includes("visit website") ||
+                  text.includes("visit site") ||
+                  className.includes("visit-website") ||
+                  className.includes("website-link") ||
+                  className.includes("visit-site")
+                ) {
+                  return href;
+                }
+              }
+
+              // Fallback
+              for (const link of links) {
+                const href = link.href;
+                if (
+                  href.startsWith("http") &&
+                  !isInternal(href) &&
+                  !forbiddenDomains.some((domain) => href.includes(domain))
+                ) {
+                  return href;
                 }
               }
 
@@ -517,20 +637,30 @@ export class DirectoryScraperService {
             if (websiteUrl) {
               companies.push({
                 ...listing,
-                websiteUrl,
+                websiteUrl: await this.resolveWebsiteUrl(websiteUrl),
               });
               console.log(`      ✓ Found website: ${websiteUrl}`);
             } else {
               console.log(
                 `      ✗ No website found for ${listing.companyName}`
               );
+              companies.push({
+                ...listing,
+                websiteUrl: listing.profileUrl,
+                needsManualReview: true,
+              });
             }
 
-            // Small delay between profile visits
-            await profilePage.waitForTimeout(500);
+            // Human-like delay
+            await profilePage.waitForTimeout(1000 + Math.random() * 1000);
           }
         } catch (e) {
-          console.log(`      ✗ Error: ${e.message}`);
+          console.log(`      ✗ Error for ${listing.companyName}: ${e.message}`);
+          companies.push({
+            ...listing,
+            websiteUrl: listing.profileUrl,
+            needsManualReview: true,
+          });
         }
       }
 
@@ -556,8 +686,162 @@ export class DirectoryScraperService {
     } else if (url.includes("goodfirms.co") || url.includes("goodfirms.com")) {
       return await this.scrapeGoodFirms(url);
     } else {
-      console.error(`Unknown directory: ${url}`);
+      console.log(`  > Using generic scraper for: ${url}`);
+      return await this.scrapeGeneric(url);
+    }
+  }
+
+  /**
+   * Generic directory scraper for unknown directory sites
+   * Attempts to extract company listings from any directory-style page
+   * @param {string} url - Directory URL
+   * @returns {Array} - Array of {companyName, websiteUrl, profileUrl}
+   */
+  static async scrapeGeneric(url) {
+    let page = null;
+    try {
+      await this.init();
+      if (!this.context) throw new Error("Browser context not initialized");
+      page = await this.context.newPage();
+
+      await page.goto(url, {
+        waitUntil: "domcontentloaded",
+        timeout: 30000,
+      });
+
+      // Wait for content to load
+      await page.waitForTimeout(3000);
+
+      // Extract company listings using generic selectors
+      const listings = await page.evaluate(() => {
+        const results = [];
+
+        // Try various container selectors that might hold company listings
+        const containerSelectors = [
+          "article",
+          ".company",
+          ".listing",
+          ".item",
+          ".card",
+          "li",
+          ".result",
+          "[class*='company']",
+          "[class*='listing']",
+          "[class*='item']",
+        ];
+
+        let mainContainer = null;
+        for (const selector of containerSelectors) {
+          const containers = document.querySelectorAll(selector);
+          if (containers.length > 3) {
+            // Found a reasonable number of items
+            mainContainer = document.body;
+            break;
+          }
+        }
+
+        const potentialContainers = document.querySelectorAll(
+          "article, .company, .listing, .item, .card, li, [class*='company'], [class*='listing'], [class*='result']"
+        );
+
+        for (const container of potentialContainers) {
+          try {
+            const text = container.textContent?.trim() || "";
+            if (text.length < 50) continue;
+
+            if (
+              text.includes("See more") ||
+              text.includes("Load more") ||
+              text.includes("Showing")
+            ) {
+              continue;
+            }
+
+            const links = container.querySelectorAll("a[href]");
+            if (links.length === 0) continue;
+
+            let companyName = "";
+            let websiteUrl = "";
+            let profileUrl = "";
+
+            const heading = container.querySelector("h1, h2, h3, h4, h5, h6");
+            if (heading) {
+              companyName = heading.textContent?.trim() || "";
+            }
+
+            if (!companyName) {
+              for (const link of links) {
+                const linkText = link.textContent?.trim();
+                if (linkText && linkText.length > 5 && linkText.length < 100) {
+                  companyName = linkText;
+                  break;
+                }
+              }
+            }
+
+            const currentUrl = window.location.hostname;
+            for (const link of links) {
+              const href = link.href;
+              if (
+                !href ||
+                href.startsWith("#") ||
+                href.startsWith("javascript:")
+              )
+                continue;
+
+              try {
+                const linkDomain = new URL(href).hostname;
+                if (
+                  linkDomain === currentUrl ||
+                  linkDomain.endsWith("." + currentUrl)
+                ) {
+                  if (!profileUrl) profileUrl = href;
+                  continue;
+                }
+                websiteUrl = href;
+                break;
+              } catch (e) {
+                continue;
+              }
+            }
+
+            if (
+              companyName &&
+              companyName.length > 3 &&
+              companyName.length < 200
+            ) {
+              results.push({
+                companyName: companyName,
+                websiteUrl: websiteUrl || null,
+                profileUrl: profileUrl || null,
+              });
+            }
+          } catch (e) {}
+        }
+
+        return results;
+      });
+
+      console.log(`    Found ${listings.length} potential company listings`);
+
+      const companies = listings.filter(
+        (listing) => listing.websiteUrl && listing.websiteUrl.length > 0
+      );
+
+      console.log(
+        `    ✓ Extracted ${companies.length} companies with websites`
+      );
+
+      return companies;
+    } catch (error) {
+      console.error(`Error scraping generic directory: ${error.message}`);
       return [];
+    } finally {
+      if (page && !page.isClosed()) {
+        try {
+          await page.close();
+        } catch (e) {}
+      }
     }
   }
 
@@ -610,31 +894,31 @@ export class DirectoryScraperService {
       ],
       goodfirms: [
         // India
-        "https://www.goodfirms.co/software-development-companies/india/ahmedabad",
-        "https://www.goodfirms.co/software-development-companies/india/bangalore",
-        "https://www.goodfirms.co/software-development-companies/india/hyderabad",
-        "https://www.goodfirms.co/software-development-companies/india/chennai",
-        "https://www.goodfirms.co/software-development-companies/india/pune",
-        "https://www.goodfirms.co/software-development-companies/india/mumbai",
-        "https://www.goodfirms.co/software-development-companies/india/delhi",
-        "https://www.goodfirms.co/software-development-companies/india/kolkata",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/ahmedabad",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/bangalore",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/hyderabad",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/chennai",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/pune",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/mumbai",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/delhi",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/kolkata",
         // US
-        "https://www.goodfirms.co/software-development-companies/usa/california/san-francisco",
-        "https://www.goodfirms.co/software-development-companies/usa/new-york",
-        "https://www.goodfirms.co/software-development-companies/usa/texas/austin",
-        "https://www.goodfirms.co/software-development-companies/usa/washington/seattle",
-        "https://www.goodfirms.co/software-development-companies/usa/california/los-angeles",
-        "https://www.goodfirms.co/software-development-companies/usa/massachusetts/boston",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/san-francisco",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/new-york",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/austin",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/seattle",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/los-angeles",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/boston",
         // UK
-        "https://www.goodfirms.co/software-development-companies/uk/london",
-        "https://www.goodfirms.co/software-development-companies/uk/manchester",
-        "https://www.goodfirms.co/software-development-companies/uk/birmingham",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/london",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/manchester",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/birmingham",
         // Canada
-        "https://www.goodfirms.co/software-development-companies/canada/toronto",
-        "https://www.goodfirms.co/software-development-companies/canada/vancouver",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/toronto",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/vancouver",
         // Australia
-        "https://www.goodfirms.co/software-development-companies/australia/sydney",
-        "https://www.goodfirms.co/software-development-companies/australia/melbourne",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/sydney",
+        "https://www.goodfirms.co/directory/city/top-software-development-companies/melbourne",
       ],
     };
   }

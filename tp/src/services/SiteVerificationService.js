@@ -70,6 +70,53 @@ export class SiteVerificationService {
         "software engineering",
       ];
 
+      // First, check URL and title for directory/listing patterns
+      const urlCheck = url.toLowerCase();
+      const pageTitle = await page.evaluate(
+        () => document.title?.toLowerCase() || ""
+      );
+
+      // Directory/listing/blog patterns to skip
+      const directoryPatterns = [
+        "companies in",
+        "software development companies",
+        "it companies",
+        "tech companies",
+        "/blog/",
+        "/blog",
+        "news",
+        "directory",
+        "company listing",
+        "business listing",
+        "/listing",
+        "marketplace",
+        " reviews",
+        "comparison",
+        " vs ",
+        "pricing",
+        "alternatives",
+        "clutch.co",
+        "goodfirms.co",
+        "utm_campaign=directory",
+        "utm_source=clutch",
+        "utm_source=goodfirms",
+      ];
+
+      // Check if URL or title contains directory patterns
+      for (const pattern of directoryPatterns) {
+        if (urlCheck.includes(pattern) || pageTitle.includes(pattern)) {
+          // Exception: allow if patterns are only in UTM but we want to be strict for now
+          // If we resolved the URL properly in the scraper, these should be mostly gone
+          await page.close();
+          return {
+            isVerified: false,
+            score: -999,
+            reasoning: `Directory/Listing page detected (contains "${pattern}")`,
+            method: "keyword",
+          };
+        }
+      }
+
       const negativeKeywords = [
         "blog",
         "news site",

@@ -1,31 +1,19 @@
-import playwright from "playwright";
+import { GoogleSearch } from "./GoogleSearch.js";
 
 /**
  * Email Extraction Service
  * Finds contact pages and extracts email addresses
+ * Reuses the same browser context as GoogleSearch to avoid conflicts
  */
 export class EmailExtractionService {
-  static browser = null;
-  static context = null;
-
   /**
-   * Initialize browser
+   * Initialize browser - reuse GoogleSearch's context
    */
   static async init() {
-    if (this.browser) return this.browser;
-
-    this.browser = await playwright.chromium.launch({
-      headless: true,
-      args: ["--disable-blink-features=AutomationControlled"],
-    });
-
-    this.context = await this.browser.newContext({
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-      viewport: { width: 1920, height: 1080 },
-    });
-
-    return this.browser;
+    // Reuse the same context as GoogleSearch
+    await GoogleSearch.init();
+    this.context = GoogleSearch.context;
+    return this.context;
   }
 
   /**
@@ -36,7 +24,11 @@ export class EmailExtractionService {
   static async findContactPage(baseUrl) {
     await this.init();
 
-    const page = await this.context.newPage();
+    // Reuse existing page or create a new one
+    let page = this.context.pages().find((p) => !p.isClosed());
+    if (!page) {
+      page = await this.context.newPage();
+    }
 
     try {
       await page.goto(baseUrl, {
@@ -84,9 +76,8 @@ export class EmailExtractionService {
     } catch (error) {
       console.error(`Error finding contact page: ${error.message}`);
       return null;
-    } finally {
-      await page.close();
     }
+    // Don't close page - reuse it
   }
 
   /**
@@ -97,7 +88,11 @@ export class EmailExtractionService {
   static async extractEmails(url) {
     await this.init();
 
-    const page = await this.context.newPage();
+    // Reuse existing page or create a new one
+    let page = this.context.pages().find((p) => !p.isClosed());
+    if (!page) {
+      page = await this.context.newPage();
+    }
 
     try {
       await page.goto(url, {
@@ -134,7 +129,7 @@ export class EmailExtractionService {
       const results = Array.from(emails)
         .filter((email) => {
           // Filter out common false positives
-          const [localPart, domain] = email.split("@");
+          const [localPart, domain] = email.split(":");
 
           // Exclude common example/trap emails
           const excludePatterns = [
@@ -187,9 +182,8 @@ export class EmailExtractionService {
     } catch (error) {
       console.error(`Error extracting emails from ${url}: ${error.message}`);
       return [];
-    } finally {
-      await page.close();
     }
+    // Don't close page - reuse it
   }
 
   /**
@@ -271,16 +265,11 @@ export class EmailExtractionService {
   }
 
   /**
-   * Close browser
+   * Close browser - delegated to GoogleSearch since we share the context
    */
   static async close() {
-    if (this.context) {
-      await this.context.close();
-    }
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-      this.context = null;
-    }
+    // Don't close here - let GoogleSearch handle cleanup
+    // We share the same browser context
+    await GoogleSearch.close();
   }
 }

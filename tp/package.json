@@ -10,6 +10,8 @@
     "outreach:city": "node ./run-outreach.js --mode=city",
     "outreach:directory": "node ./run-outreach.js --mode=directory",
     "outreach:queries": "node ./run-outreach.js --mode=queries",
+    "outreach:blog": "node ./run-outreach.js --mode=blog",
+    "outreach:extract-emails": "node ./run-outreach.js --mode=extract-emails",
     "outreach:stats": "node ./run-outreach.js --stats",
     "populate": "node ./populate-data.js",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -17,6 +19,9 @@
   "dependencies": {
     "better-sqlite3": "^11.1.2",
     "dotenv": "^16.4.5",
-    "playwright": "^1.45.1"
+    "google-sr": "^6.0.0",
+    "playwright": "^1.45.1",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   }
 }

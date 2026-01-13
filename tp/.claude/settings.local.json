@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "mcp__web-reader__webReader"
+      "mcp__web-reader__webReader",
+      "Bash(sqlite3:*)",
+      "Bash(node migrate-add-blog-source.js:*)",
+      "Bash(npm run outreach:blog:*)",
+      "Bash(node:*)"
     ]
   }
 }
