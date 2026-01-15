@@ -1,34 +1,4 @@
-# Dependencies
+
 
 node_modules/
-
-# Database
-*.db
-*.db-shm
-*.db-wal
-
-# Browser profiles and state
-chrome-profile/
-browser-state.json
-
-# Environment
-.env
-.env.local
-
-# Logs
-*.log
-npm-debug.log*
-
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Temporary files
-tmp/
-*.tmp
+outreach_system.db

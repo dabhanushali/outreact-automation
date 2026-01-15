@@ -5,8 +5,8 @@ import { db } from "../database/db.js";
  * Tracks and enforces daily limits for prospect/email/blog asset collection
  */
 export class DailyLimitService {
-  static DAILY_PROSPECT_LIMIT = 100; // Target: 100 companies per day
-  static DAILY_BLOG_LIMIT = 100; // Target: 100 blog assets per day (same as prospects)
+  static DAILY_PROSPECT_LIMIT = 10; // Target: 100 companies per day
+  static DAILY_BLOG_LIMIT = 10; // Target: 100 blog assets per day (same as prospects)
 
   /**
    * Get today's date string
@@ -131,7 +131,10 @@ export class DailyLimitService {
    */
   static getProgress() {
     const stats = this.getTodayStats();
-    return Math.min(100, Math.round((stats.prospects_added / this.DAILY_PROSPECT_LIMIT) * 100));
+    return Math.min(
+      100,
+      Math.round((stats.prospects_added / this.DAILY_PROSPECT_LIMIT) * 100)
+    );
   }
 
   /**
@@ -140,7 +143,10 @@ export class DailyLimitService {
    */
   static getBlogProgress() {
     const stats = this.getTodayStats();
-    return Math.min(100, Math.round((stats.blog_assets_found / this.DAILY_BLOG_LIMIT) * 100));
+    return Math.min(
+      100,
+      Math.round((stats.blog_assets_found / this.DAILY_BLOG_LIMIT) * 100)
+    );
   }
 
   /**
@@ -156,11 +162,19 @@ export class DailyLimitService {
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`           DAILY LIMIT STATS (${stats.date})          `);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`  Prospects Added:    ${stats.prospects_added}/${this.DAILY_PROSPECT_LIMIT}`);
+    console.log(
+      `  Prospects Added:    ${stats.prospects_added}/${this.DAILY_PROSPECT_LIMIT}`
+    );
     console.log(`  Emails Found:       ${stats.emails_found}`);
-    console.log(`  Blog Assets Found:  ${stats.blog_assets_found}/${this.DAILY_BLOG_LIMIT}`);
-    console.log(`  Progress:           ${progress}% (prospects), ${blogProgress}% (blogs)`);
-    console.log(`  Remaining:          ${remaining} prospects, ${blogRemaining} blogs`);
+    console.log(
+      `  Blog Assets Found:  ${stats.blog_assets_found}/${this.DAILY_BLOG_LIMIT}`
+    );
+    console.log(
+      `  Progress:           ${progress}% (prospects), ${blogProgress}% (blogs)`
+    );
+    console.log(
+      `  Remaining:          ${remaining} prospects, ${blogRemaining} blogs`
+    );
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
   }
 

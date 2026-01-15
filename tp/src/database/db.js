@@ -71,15 +71,51 @@ function initSchema() {
         'goodfirms',
         'ahrefs',
         'semrush',
-        'blog',
         'techreviewer',
         'directory',
         'other'
       )),
       last_source_query TEXT,
-      prospect_type TEXT CHECK(prospect_type IN ('company', 'blog')) DEFAULT 'company',
+      prospect_type TEXT CHECK(prospect_type IN ('company')) DEFAULT 'company',
       emails_extracted BOOLEAN DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  /* =========================
+     BLOG PROSPECTS
+  ========================= */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS blog_prospects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      domain TEXT NOT NULL UNIQUE,
+      blog_name TEXT,
+      website_url TEXT,
+      last_source_type TEXT CHECK(last_source_type IN (
+        'blog',
+        'google',
+        'other'
+      )),
+      last_source_query TEXT,
+      emails_extracted BOOLEAN DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  /* =========================
+     BLOG EMAILS
+  ========================= */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS blog_emails (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      blog_prospect_id INTEGER NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      source_page TEXT,
+      is_domain_match BOOLEAN DEFAULT 1,
+      is_generic BOOLEAN DEFAULT 1,
+      confidence INTEGER DEFAULT 100,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (blog_prospect_id) REFERENCES blog_prospects(id)
     );
   `);
 
@@ -245,7 +281,9 @@ function initSchema() {
   ========================= */
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_prospects_domain ON prospects(domain);
+    CREATE INDEX IF NOT EXISTS idx_blog_prospects_domain ON blog_prospects(domain);
     CREATE INDEX IF NOT EXISTS idx_emails_prospect ON emails(prospect_id);
+    CREATE INDEX IF NOT EXISTS idx_blog_emails_prospect ON blog_emails(blog_prospect_id);
     CREATE INDEX IF NOT EXISTS idx_leads_campaign ON leads(campaign_id);
     CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
     CREATE INDEX IF NOT EXISTS idx_outreach_lead ON outreach_logs(lead_id);

@@ -2,14 +2,15 @@
  * Backlink Outreach System - Main Entry Point
  *
  * Usage:
- *   node run-outreach.js                      - Interactive mode
- *   node run-outreach.js --mode city           - City search mode
- *   node run-outreach.js --mode directory      - Directory scraping mode
- *   node run-outreach.js --mode queries        - Search queries from DB
- *   node run-outreach.js --mode blog           - Blog discovery mode
- *   node run-outreach.js --mode extract-emails - Email extraction mode
- *   node run-outreach.js --stats               - Show daily stats
- *   node run-outreach.js --reset               - Reset daily stats
+ *   node run-outreach.js                         - Interactive mode
+ *   node run-outreach.js --mode city              - City search mode
+ *   node run-outreach.js --mode directory         - Directory scraping mode
+ *   node run-outreach.js --mode queries           - Search queries from DB
+ *   node run-outreach.js --mode blog              - Blog discovery mode
+ *   node run-outreach.js --mode extract-emails    - Email extraction mode (companies)
+ *   node run-outreach.js --mode extract-blog-emails - Email extraction mode (blogs)
+ *   node run-outreach.js --stats                  - Show daily stats
+ *   node run-outreach.js --reset                  - Reset daily stats
  */
 
 import { initSchema, db } from "./src/database/db.js";
@@ -142,13 +143,14 @@ async function main() {
   2. Directory Scraping Mode   - Scrape Clutch.co / GoodFirms listings
   3. Database Queries Mode     - Use search_queries from database
   4. Blog Discovery Mode       - Search for campaign-specific blog assets
-  5. Extract Emails           - Extract emails for newly added prospects
-  6. Show Daily Stats
-  7. Exit
+  5. Extract Emails           - Extract emails for newly added company prospects
+  6. Extract Blog Emails      - Extract emails for newly added blog prospects
+  7. Show Daily Stats
+  8. Exit
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `);
 
-    mode = await question("Enter choice (1-7): ");
+    mode = await question("Enter choice (1-8): ");
   }
 
   try {
@@ -262,16 +264,22 @@ async function main() {
 
       case "5":
       case "extract-emails":
-        // Email Extraction Mode
+        // Email Extraction Mode (company prospects)
         await OutreachOrchestrator.extractEmailsForNewProspects();
         break;
 
       case "6":
+      case "extract-blog-emails":
+        // Blog Email Extraction Mode
+        await OutreachOrchestrator.extractEmailsForBlogProspects();
+        break;
+
+      case "7":
       case "stats":
         DailyLimitService.printStats();
         break;
 
-      case "7":
+      case "8":
       case "exit":
         console.log("Goodbye!");
         break;

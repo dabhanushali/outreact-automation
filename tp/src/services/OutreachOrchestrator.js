@@ -1,6 +1,8 @@
 import { db } from "../database/db.js";
 import { ProspectRepo } from "../repositories/ProspectRepo.js";
+import { BlogProspectRepo } from "../repositories/BlogProspectRepo.js";
 import { EmailRepo } from "../repositories/EmailRepo.js";
+import { BlogEmailRepo } from "../repositories/BlogEmailRepo.js";
 import { GoogleSearch } from "./GoogleSearch.js";
 import { SiteVerificationService } from "./SiteVerificationService.js";
 import { EmailExtractionService } from "./EmailExtractionService.js";
@@ -18,8 +20,9 @@ export class OutreachOrchestrator {
    * @param {string} city - City name
    * @param {number} brandId - Brand ID (optional, will use first brand if not provided)
    * @param {number} campaignId - Campaign ID (optional, will use first campaign if not provided)
+   * @param {boolean} autoExtractEmails - Auto-extract emails after discovery (default: true)
    */
-  static async runCitySearch(city, brandId = null, campaignId = null) {
+  static async runCitySearch(city, brandId = null, campaignId = null, autoExtractEmails = true) {
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`      MODE A: ORGANIC CITY SEARCH - ${city}      `);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
@@ -87,7 +90,8 @@ export class OutreachOrchestrator {
           result.title,
           query,
           campaignId,
-          "google"
+          "google",
+          city
         );
 
         addedToday = DailyLimitService.getTodayStats().prospects_added;
@@ -101,6 +105,11 @@ export class OutreachOrchestrator {
     }
 
     DailyLimitService.printStats();
+
+    // Auto-extract emails for newly added prospects
+    if (autoExtractEmails) {
+      await this.extractEmailsForNewProspects();
+    }
   }
 
   /**
@@ -108,11 +117,13 @@ export class OutreachOrchestrator {
    * @param {Array} directoryUrls - Array of directory URLs
    * @param {number} brandId - Brand ID (optional, will use first brand if not provided)
    * @param {number} campaignId - Campaign ID (optional, will use first campaign if not provided)
+   * @param {boolean} autoExtractEmails - Auto-extract emails after discovery (default: true)
    */
   static async runDirectoryScraping(
     directoryUrls,
     brandId = null,
-    campaignId = null
+    campaignId = null,
+    autoExtractEmails = true
   ) {
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`      MODE B: DIRECTORY SCRAPING                  `);
@@ -155,6 +166,30 @@ export class OutreachOrchestrator {
 
       console.log(`  Found ${companies.length} companies. Processing...`);
 
+      // Extract city from directory URL for tracking
+      let city = null;
+      let country = null;
+      try {
+        const urlParts = dirUrl.toLowerCase().split('/');
+        // Clutch: https://clutch.co/in/developers/bangalore
+        // GoodFirms: https://www.goodfirms.co/directory/city/top-software-development-companies/bangalore
+        const cityIndex = urlParts.findIndex(p =>
+          p === 'developers' || p === 'agencies' || p.includes('software-development-companies')
+        );
+        if (cityIndex !== -1 && urlParts[cityIndex + 1]) {
+          city = urlParts[cityIndex + 1].replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        }
+
+        // Extract country from URL path
+        const countryCode = urlParts.find(p => p === 'in' || p === 'us' || p === 'uk' || p === 'ca' || p === 'au');
+        if (countryCode) {
+          const countryMap = { 'in': 'India', 'us': 'United States', 'uk': 'United Kingdom', 'ca': 'Canada', 'au': 'Australia' };
+          country = countryMap[countryCode];
+        }
+      } catch (e) {
+        // Ignore city extraction errors
+      }
+
       // Log first few companies for debugging
       console.log(`  Sample companies found:`);
       companies.slice(0, 3).forEach((c, i) => {
@@ -195,7 +230,9 @@ export class OutreachOrchestrator {
           company.companyName,
           dirUrl,
           campaignId,
-          dirUrl.includes("clutch") ? "clutch" : "goodfirms"
+          dirUrl.includes("clutch") ? "clutch" : "goodfirms",
+          city,
+          country
         );
 
         // Delay between processing
@@ -207,6 +244,11 @@ export class OutreachOrchestrator {
     }
 
     DailyLimitService.printStats();
+
+    // Auto-extract emails for newly added prospects
+    if (autoExtractEmails) {
+      await this.extractEmailsForNewProspects();
+    }
   }
 
   /**
@@ -217,8 +259,9 @@ export class OutreachOrchestrator {
   /**
    * Mode D: Blog Specific Discovery
    * Finds blog assets based on campaign keywords and search modifiers
+   * @param {boolean} autoExtractEmails - Auto-extract emails after discovery (default: true)
    */
-  static async runBlogDiscovery() {
+  static async runBlogDiscovery(autoExtractEmails = true) {
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`      MODE D: BLOG SPECIFIC DISCOVERY             `);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
@@ -242,7 +285,9 @@ export class OutreachOrchestrator {
 
     for (const campaign of campaigns) {
       if (DailyLimitService.isBlogLimitReached()) {
-        console.log(`\n✓ Blog asset daily limit reached (${DailyLimitService.DAILY_BLOG_LIMIT})! Stopping.`);
+        console.log(
+          `\n✓ Blog asset daily limit reached (${DailyLimitService.DAILY_BLOG_LIMIT})! Stopping.`
+        );
         break;
       }
 
@@ -315,51 +360,47 @@ export class OutreachOrchestrator {
                 added++;
                 DailyLimitService.incrementBlogAssets();
 
-                // 2. Get or create prospect for this blog domain (marked as 'blog' type)
-                let prospectId = ProspectRepo.findByDomain(resultDomain)?.id;
+                // 2. Get or create blog prospect for this blog domain
+                let blogProspect = BlogProspectRepo.findByDomain(resultDomain);
 
-                if (!prospectId) {
-                  // Extract company name from title or use domain
-                  const companyName = result.title || resultDomain.split('.')[0];
+                if (!blogProspect) {
+                  // Extract blog name from title or use domain
+                  const blogName =
+                    result.title || resultDomain.split(".")[0];
                   const baseUrl = `${resultUrl.protocol}//${resultUrl.hostname}`;
 
-                  // Create prospect with 'blog' type (no email extraction now)
-                  prospectId = ProspectRepo.create(
+                  // Create blog prospect in the new blog_prospects table
+                  const blogProspectId = BlogProspectRepo.create(
                     resultDomain,
-                    companyName,
+                    blogName,
                     baseUrl,
-                    null, // city
-                    null, // country
-                    'blog' // prospect_type - marked as blog, not company!
+                    query,
+                    "blog"
                   );
 
-                  if (prospectId) {
-                    console.log(`      → Created blog prospect: ${resultDomain}`);
+                  if (blogProspectId) {
+                    console.log(
+                      `      → Created blog prospect: ${resultDomain}`
+                    );
 
-                    // 3. Create lead entry
-                    ProspectRepo.createLead(
+                    // 3. Link to campaign
+                    BlogProspectRepo.linkToCampaign(
                       campaign.brand_id,
                       campaign.id,
-                      prospectId,
+                      blogProspectId,
                       query,
                       "blog"
                     );
                   }
                 } else {
-                  // Prospect already exists, just link to campaign if not already linked
-                  const existingLead = db.prepare(
-                    "SELECT id FROM leads WHERE prospect_id = ? AND campaign_id = ?"
-                  ).get(prospectId, campaign.id);
-
-                  if (!existingLead) {
-                    ProspectRepo.createLead(
-                      campaign.brand_id,
-                      campaign.id,
-                      prospectId,
-                      query,
-                      "blog"
-                    );
-                  }
+                  // Blog prospect already exists, just update source info if needed
+                  BlogProspectRepo.linkToCampaign(
+                    campaign.brand_id,
+                    campaign.id,
+                    blogProspect.id,
+                    query,
+                    "blog"
+                  );
                 }
               }
             } catch (e) {
@@ -379,9 +420,14 @@ export class OutreachOrchestrator {
     }
 
     DailyLimitService.printStats();
+
+    // Auto-extract emails for newly added blog prospects
+    if (autoExtractEmails) {
+      await this.extractEmailsForBlogProspects();
+    }
   }
 
-  static async runFromSearchQueries(limit = 10) {
+  static async runFromSearchQueries(limit = 10, autoExtractEmails = true) {
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`      MODE C: SEARCH QUERIES FROM DATABASE        `);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
@@ -447,7 +493,8 @@ export class OutreachOrchestrator {
           result.title,
           queryRow.query,
           campaignId,
-          "google"
+          "google",
+          queryRow.city
         );
 
         // Small delay
@@ -461,6 +508,11 @@ export class OutreachOrchestrator {
     }
 
     DailyLimitService.printStats();
+
+    // Auto-extract emails for newly added prospects
+    if (autoExtractEmails) {
+      await this.extractEmailsForNewProspects();
+    }
   }
 
   /**
@@ -471,6 +523,8 @@ export class OutreachOrchestrator {
    * @param {string} sourceQuery - The search query/source
    * @param {number} campaignId - Campaign ID
    * @param {string} sourceType - Source type (google, clutch, goodfirms, etc.)
+   * @param {string} city - City name (optional)
+   * @param {string} country - Country name (optional)
    */
   static async processProspect(
     brandId,
@@ -478,7 +532,9 @@ export class OutreachOrchestrator {
     companyName,
     sourceQuery,
     campaignId,
-    sourceType = "google"
+    sourceType = "google",
+    city = null,
+    country = null
   ) {
     try {
       // Extract domain
@@ -536,7 +592,9 @@ export class OutreachOrchestrator {
                   ? "clutch"
                   : dirDomain.includes("goodfirms")
                   ? "goodfirms"
-                  : "directory"
+                  : "directory",
+                city,
+                country
               );
 
               // Small delay between processing companies
@@ -576,7 +634,9 @@ export class OutreachOrchestrator {
       const prospectId = ProspectRepo.create(
         domain,
         companyName || domain.split(".")[0],
-        websiteUrl
+        websiteUrl,
+        city,
+        country
       );
 
       if (!prospectId) {
@@ -597,7 +657,9 @@ export class OutreachOrchestrator {
       DailyLimitService.incrementProspects();
 
       console.log(`    ✓ Prospect added (ID: ${prospectId})`);
-      console.log(`    ℹ Emails will be extracted separately (run extract-emails mode)`);
+      console.log(
+        `    ℹ Emails will be extracted at end of discovery`
+      );
     } catch (error) {
       console.error(`  ✗ Error processing ${websiteUrl}: ${error.message}`);
     }
@@ -613,7 +675,7 @@ export class OutreachOrchestrator {
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     // Get unprocessed prospects (company type only)
-    const prospects = ProspectRepo.getUnprocessedProspects(100);
+    const prospects = ProspectRepo.getUnprocessedProspects(10);
 
     if (prospects.length === 0) {
       console.log(`  No unprocessed prospects found.`);
@@ -627,7 +689,11 @@ export class OutreachOrchestrator {
     let emailsFound = 0;
 
     for (const prospect of prospects) {
-      console.log(`\n[${processed + 1}/${prospects.length}] ${prospect.domain} - ${prospect.company_name || 'Unknown'}`);
+      console.log(
+        `\n[${processed + 1}/${prospects.length}] ${prospect.domain} - ${
+          prospect.company_name || "Unknown"
+        }`
+      );
 
       // Extract emails from website
       console.log(`  → Extracting emails from ${prospect.website_url}...`);
@@ -679,6 +745,7 @@ export class OutreachOrchestrator {
           );
           emailsAdded++;
           emailsFound++;
+          DailyLimitService.incrementEmails();
 
           const matchIndicator = isDomainMatch ? "✓" : "○";
           const genericIndicator = isGeneric ? "📧" : "👤";
@@ -699,9 +766,10 @@ export class OutreachOrchestrator {
       const bestEmail = EmailRepo.getBestEmail(prospect.id);
       if (bestEmail) {
         // Has email → Ready for outreach
-        db.prepare(
-          "UPDATE leads SET status = ? WHERE prospect_id = ?"
-        ).run("READY", prospect.id);
+        db.prepare("UPDATE leads SET status = ? WHERE prospect_id = ?").run(
+          "READY",
+          prospect.id
+        );
         console.log(`  ✓ Lead status: READY (has email)`);
       } else {
         console.log(`  ℹ Lead status: NEW (no email found)`);
@@ -717,6 +785,119 @@ export class OutreachOrchestrator {
     console.log(`           EMAIL EXTRACTION COMPLETE              `);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`  Prospects Processed: ${processed}/${prospects.length}`);
+    console.log(`  Total Emails Found:  ${emailsFound}`);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+
+    DailyLimitService.printStats();
+  }
+
+  /**
+   * Mode F: Email Extraction for Blog Prospects
+   * Extracts emails for newly added blog prospects
+   */
+  static async extractEmailsForBlogProspects() {
+    console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`      MODE F: BLOG EMAIL EXTRACTION               `);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+
+    // Get unprocessed blog prospects
+    const blogProspects = BlogProspectRepo.getUnprocessedProspects(10);
+
+    if (blogProspects.length === 0) {
+      console.log(`  No unprocessed blog prospects found.`);
+      console.log(`  All blog prospects already have emails extracted.`);
+      return;
+    }
+
+    console.log(`  Found ${blogProspects.length} unprocessed blog prospects.\n`);
+
+    let processed = 0;
+    let emailsFound = 0;
+
+    for (const blogProspect of blogProspects) {
+      console.log(
+        `\n[${processed + 1}/${blogProspects.length}] ${blogProspect.domain} - ${
+          blogProspect.blog_name || "Unknown"
+        }`
+      );
+
+      // Extract emails from website
+      console.log(`  → Extracting emails from ${blogProspect.website_url}...`);
+      const emails = await EmailExtractionService.extractFromWebsite(
+        blogProspect.website_url
+      );
+
+      if (emails.length === 0) {
+        console.log(`  ✗ No emails found`);
+        // Mark as processed even if no emails found
+        BlogProspectRepo.markEmailsExtracted(blogProspect.id);
+        processed++;
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+
+      console.log(`  ✓ Found ${emails.length} email(s)`);
+
+      let emailsAdded = 0;
+
+      for (const emailData of emails) {
+        // Check if email already exists
+        if (BlogEmailRepo.exists(emailData.email)) {
+          console.log(`    ⊗ ${emailData.email} (duplicate)`);
+          continue;
+        }
+
+        // Validate and classify email
+        const isDomainMatch = EmailExtractionService.isDomainMatch(
+          emailData.email,
+          blogProspect.website_url
+        );
+        const isGeneric = EmailExtractionService.isGeneric(emailData.email);
+
+        // Calculate confidence score
+        let confidence = 100;
+        if (!isDomainMatch) confidence -= 30;
+        if (isGeneric) confidence -= 20;
+
+        // Only save if reasonable confidence
+        if (confidence >= 50) {
+          BlogEmailRepo.create(
+            blogProspect.id,
+            emailData.email,
+            emailData.sourcePage,
+            isDomainMatch,
+            isGeneric,
+            confidence
+          );
+          emailsAdded++;
+          emailsFound++;
+          DailyLimitService.incrementEmails();
+
+          const matchIndicator = isDomainMatch ? "✓" : "○";
+          const genericIndicator = isGeneric ? "📧" : "👤";
+          console.log(
+            `    ${matchIndicator} ${genericIndicator} ${emailData.email} (${confidence}%)`
+          );
+        }
+      }
+
+      if (emailsAdded > 0) {
+        console.log(`  ✓ ${emailsAdded} email(s) saved to database`);
+      }
+
+      // Mark as processed
+      BlogProspectRepo.markEmailsExtracted(blogProspect.id);
+
+      processed++;
+
+      // Delay between processing (human-like)
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+
+    console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`         BLOG EMAIL EXTRACTION COMPLETE            `);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`  Blog Prospects Processed: ${processed}/${blogProspects.length}`);
     console.log(`  Total Emails Found:  ${emailsFound}`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
 

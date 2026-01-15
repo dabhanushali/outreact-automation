@@ -55,7 +55,10 @@ export class EmailExtractionService {
           for (const el of elements) {
             const text = el.textContent.toLowerCase().trim();
             const href = el.href;
-            if (href && (text.includes("contact") || text.includes("get in touch"))) {
+            if (
+              href &&
+              (text.includes("contact") || text.includes("get in touch"))
+            ) {
               return href;
             }
           }
@@ -96,7 +99,7 @@ export class EmailExtractionService {
 
     try {
       await page.goto(url, {
-        waitUntil: "networkidle",
+        waitUntil: "domcontentloaded",
         timeout: 15000,
       });
 
@@ -120,7 +123,8 @@ export class EmailExtractionService {
       }
 
       // Also check HTML for mailto links
-      const mailtoRegex = /mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
+      const mailtoRegex =
+        /mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
       while ((match = mailtoRegex.exec(pageHtml)) !== null) {
         emails.add(match[1].toLowerCase());
       }
@@ -129,7 +133,7 @@ export class EmailExtractionService {
       const results = Array.from(emails)
         .filter((email) => {
           // Filter out common false positives
-          const [localPart, domain] = email.split(":");
+          const [localPart, domain] = email.split("@");
 
           // Exclude common example/trap emails
           const excludePatterns = [
