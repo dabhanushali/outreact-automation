@@ -1,0 +1,126 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/settings/geo">Settings</a></li>
+          <li class="breadcrumb-item active">Geographic</li>
+        </ol>
+      </nav>
+      <h1><i class="bi bi-geo-alt"></i> Geographic Targeting</h1>
+      <p class="text-muted">Manage countries and cities for prospect discovery</p>
+    </div>
+  </div>
+
+  <!-- Add Country -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-plus-circle"></i> Add Country
+        </div>
+        <div class="card-body">
+          <form method="POST" action="/settings/countries" class="row g-3">
+            <div class="col-md-10">
+              <input type="text" name="name" class="form-control" placeholder="Country name" required>
+            </div>
+            <div class="col-md-2">
+              <button type="submit" class="btn btn-primary w-100">Add</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add City -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-plus-circle"></i> Add City
+        </div>
+        <div class="card-body">
+          <form method="POST" action="/settings/cities" class="row g-3">
+            <div class="col-md-4">
+              <select name="country_id" class="form-select" required>
+                <option value="">Select Country</option>
+${countries.map(c => `
+                <option value="${c.id}">${c.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <input type="text" name="name" class="form-control" placeholder="City name" required>
+            </div>
+            <div class="col-md-2">
+              <button type="submit" class="btn btn-primary w-100">Add</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Countries -->
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-globe"></i> Countries (${countries.length})
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Cities</th>
+                </tr>
+              </thead>
+              <tbody>
+${countries.map(c => `
+                <tr>
+                  <td>${c.name}</td>
+                  <td><span class="badge bg-info">${c.city_count}</span></td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cities -->
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-building"></i> Cities (First 500)
+        </div>
+        <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>City</th>
+                  <th>Country</th>
+                </tr>
+              </thead>
+              <tbody>
+${cities.map(c => `
+                <tr>
+                  <td>${c.name}</td>
+                  <td>${c.country_name}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+%>
+<%- include('../layout', { title: 'Geographic Settings', activePage: 'settings', content: content, user: user }) %>

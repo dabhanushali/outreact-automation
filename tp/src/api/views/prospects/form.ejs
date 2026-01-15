@@ -1,0 +1,106 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/prospects">Prospects</a></li>
+          <li class="breadcrumb-item active">${prospect ? 'Edit Prospect' : 'Add Prospect'}</li>
+        </ol>
+      </nav>
+      <h1><i class="bi bi-building"></i> ${prospect ? 'Edit Prospect' : 'Add New Prospect'}</h1>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-8">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-info-circle"></i> Prospect Information
+        </div>
+        <div class="card-body">
+          <form method="POST" action="${prospect ? `/prospects/${prospect.id}/update` : '/prospects/new'}">
+            <div class="mb-3">
+              <label for="domain" class="form-label">Domain *</label>
+              <input type="text" class="form-control" id="domain" name="domain"
+                     value="${prospect?.domain || ''}" ${prospect ? 'readonly' : 'required'}>
+              <div class="form-text">Example: example.com (without https://)</div>
+            </div>
+
+            <div class="mb-3">
+              <label for="company_name" class="form-label">Company Name</label>
+              <input type="text" class="form-control" id="company_name" name="company_name"
+                     value="${prospect?.company_name || ''}">
+            </div>
+
+            <div class="mb-3">
+              <label for="website_url" class="form-label">Website URL</label>
+              <input type="url" class="form-control" id="website_url" name="website_url"
+                     value="${prospect?.website_url || ''}"
+                     placeholder="https://">
+            </div>
+
+            <div class="row">
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="city" class="form-label">City</label>
+                  <input type="text" class="form-control" id="city" name="city"
+                         value="${prospect?.city || ''}">
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="country" class="form-label">Country</label>
+                  <input type="text" class="form-control" id="country" name="country"
+                         value="${prospect?.country || ''}">
+                </div>
+              </div>
+            </div>
+
+            ${!prospect ? `
+            <div class="mb-3">
+              <label for="campaign_id" class="form-label">Add to Campaign (Optional)</label>
+              <select class="form-select" id="campaign_id" name="campaign_id">
+                <option value="">-- Select Campaign --</option>
+                ${campaigns.map(c => `
+                  <option value="${c.id}">${c.name}</option>
+                `).join('')}
+              </select>
+              <div class="form-text">If selected, this prospect will be added to the chosen campaign.</div>
+            </div>
+            ` : ''}
+
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-save"></i> ${prospect ? 'Update Prospect' : 'Create Prospect'}
+              </button>
+              <a href="${prospect ? `/prospects/${prospect.id}` : '/prospects'}" class="btn btn-secondary">
+                <i class="bi bi-x-lg"></i> Cancel
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-lightbulb"></i> Tips
+        </div>
+        <div class="card-body">
+          <ul class="mb-0">
+            <li>Domain is required and must be unique</li>
+            <li>Enter domain without https:// or www.</li>
+            <li>You can add prospects to this prospect after creation</li>
+            ${!prospect ? '<li>Optionally add to a campaign to start tracking</li>' : ''}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+%>
+<%- include('../layout', { title: (prospect ? 'Edit Prospect' : 'Add Prospect') + ' - Outreach Admin', activePage: 'prospects', content: content, user: user }) %>

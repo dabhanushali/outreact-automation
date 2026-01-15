@@ -1,0 +1,84 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-center">
+      <div>
+        <h1><i class="bi bi-funnel"></i> Campaigns</h1>
+        <p class="text-muted mb-0">Manage your outreach campaigns</p>
+      </div>
+      <a href="/campaigns/new" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> New Campaign
+      </a>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Brand</th>
+                  <th>Target URL</th>
+                  <th>Prospects</th>
+                  <th>Leads</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+`;
+campaigns.forEach(campaign => {
+  content += `
+                <tr>
+                  <td>${campaign.id}</td>
+                  <td><a href="/campaigns/${campaign.id}"><strong>${campaign.name}</strong></a></td>
+                  <td><span class="badge bg-secondary">${campaign.brand_name || '-'}</span></td>
+                  <td>
+                    ${campaign.target_url ? `
+                      <a href="${campaign.target_url}" target="_blank" class="text-truncate d-block" style="max-width: 200px;">
+                        ${campaign.target_url}
+                      </a>
+                    ` : '-'}
+                  </td>
+                  <td><span class="badge bg-success">${campaign.prospect_count || 0}</span></td>
+                  <td><span class="badge bg-info">${campaign.lead_count || 0}</span></td>
+                  <td>${new Date(campaign.created_at).toLocaleDateString()}</td>
+                  <td>
+                    <a href="/campaigns/${campaign.id}" class="btn btn-sm btn-outline-primary" title="View">
+                      <i class="bi bi-eye"></i>
+                    </a>
+                    <a href="/campaigns/${campaign.id}/edit" class="btn btn-sm btn-outline-secondary" title="Edit">
+                      <i class="bi bi-pencil"></i>
+                    </a>
+                  </td>
+                </tr>
+  `;
+});
+if (campaigns.length === 0) {
+  content += `
+                <tr>
+                  <td colspan="8" class="text-center text-muted py-4">
+                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                    No campaigns found. <a href="/campaigns/new">Create your first campaign</a>.
+                  </td>
+                </tr>
+  `;
+}
+content += `
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+%>
+<%- include('../layout', { title: 'Campaigns - Outreach Admin', activePage: 'campaigns', content: content, user: user }) %>

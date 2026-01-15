@@ -1,0 +1,68 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/blog-emails">Blog Emails</a></li>
+          <li class="breadcrumb-item active">Select Blog Prospect</li>
+        </ol>
+      </nav>
+      <h1><i class="bi bi-journal-richtext"></i> Select Blog Prospect for Email</h1>
+      <p class="text-muted">Choose a blog prospect to add an email to</p>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-search"></i> All Blog Prospects
+        </div>
+        <div class="card-body">
+          ${prospects.length > 0 ? `
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th>Blog Name</th>
+                  <th>Emails Extracted</th>
+                  <th>Created</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+${prospects.map(p => `
+                <tr>
+                  <td><a href="/blog-prospects/${p.id}" target="_blank">${p.domain}</a></td>
+                  <td>${p.blog_name || '-'}</td>
+                  <td>
+                    <span class="badge bg-${p.emails_extracted ? 'success' : 'secondary'}">
+                      ${p.emails_extracted ? 'Yes' : 'No'}
+                    </span>
+                  </td>
+                  <td>${new Date(p.created_at).toLocaleDateString()}</td>
+                  <td>
+                    <a href="/blog-emails/new?blog_prospect_id=${p.id}" class="btn btn-sm btn-primary">
+                      <i class="bi bi-plus-lg"></i> Add Email
+                    </a>
+                  </td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+          ` : `
+          <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No blog prospects found. <a href="/blog-prospects/new">Create a blog prospect first</a>.
+          </div>
+          `}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+%>
+<%- include('../layout', { title: 'Select Blog Prospect - Outreach Admin', activePage: 'emails', content: content, user: user }) %>

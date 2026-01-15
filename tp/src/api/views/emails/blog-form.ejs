@@ -1,0 +1,115 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/blog-emails">Blog Emails</a></li>
+          <li class="breadcrumb-item"><a href="/blog-prospects/${prospect.id}">${prospect.domain}</a></li>
+          <li class="breadcrumb-item active">${email ? 'Edit Blog Email' : 'Add Blog Email'}</li>
+        </ol>
+      </nav>
+      <h1><i class="bi bi-envelope"></i> ${email ? 'Edit Blog Email' : 'Add Blog Email'} for ${prospect.blog_name || prospect.domain}</h1>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-8">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-info-circle"></i> Blog Email Information
+        </div>
+        <div class="card-body">
+          <form method="POST" action="${email ? `/blog-emails/${email.id}/update` : '/blog-emails/new'}">
+            <input type="hidden" name="blog_prospect_id" value="${prospect.id}">
+
+            <div class="mb-3">
+              <label for="email" class="form-label">Email Address *</label>
+              <input type="email" class="form-control" id="email" name="email"
+                     value="${email?.email || ''}" required>
+            </div>
+
+            <div class="mb-3">
+              <label for="source_page" class="form-label">Source Page URL</label>
+              <input type="url" class="form-control" id="source_page" name="source_page"
+                     value="${email?.source_page || ''}"
+                     placeholder="https://">
+              <div class="form-text">URL where this email was found</div>
+            </div>
+
+            <div class="mb-3">
+              <label for="confidence" class="form-label">Confidence Level</label>
+              <input type="number" class="form-range" id="confidence" name="confidence"
+                     min="0" max="100" value="${email?.confidence || 100}"
+                     oninput="document.getElementById('confidence-value').textContent = this.value + '%'">
+              <div class="form-text">Value: <span id="confidence-value">${email?.confidence || 100}%</span></div>
+            </div>
+
+            <div class="mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="is_domain_match" name="is_domain_match"
+                       ${email?.is_domain_match ? 'checked' : ''}>
+                <label class="form-check-label" for="is_domain_match">
+                  <strong>Domain Match</strong> - Email domain matches blog domain
+                </label>
+                <div class="form-text">Check if the email domain matches ${prospect.domain}</div>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="is_generic" name="is_generic"
+                       ${email?.is_generic ? 'checked' : ''}>
+                <label class="form-check-label" for="is_generic">
+                  <strong>Generic Email</strong> - Generic role-based email (info@, contact@, etc.)
+                </label>
+                <div class="form-text">Check if this is a generic/role-based email address</div>
+              </div>
+            </div>
+
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-save"></i> ${email ? 'Update Blog Email' : 'Add Blog Email'}
+              </button>
+              <a href="${email ? `/emails/${email.id}` : `/blog-prospects/${prospect.id}`}" class="btn btn-secondary">
+                <i class="bi bi-x-lg"></i> Cancel
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-journal-richtext"></i> Blog Prospect Info
+        </div>
+        <div class="card-body">
+          <table class="table table-sm">
+            <tr><th>Domain:</th><td>${prospect.domain}</td></tr>
+            <tr><th>Blog Name:</th><td>${prospect.blog_name || '-'}</td></tr>
+            <tr><th>Website:</th><td>${prospect.website_url || '-'}</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card mt-3">
+        <div class="card-header">
+          <i class="bi bi-lightbulb"></i> Tips
+        </div>
+        <div class="card-body">
+          <ul class="mb-0">
+            <li><strong>Domain Match:</strong> Personal emails (john@blog.com) are better than generic ones</li>
+            <li><strong>Generic Email:</strong> info@, contact@, editor@ are generic emails</li>
+            <li><strong>Confidence:</strong> Higher confidence for verified sources</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+%>
+<%- include('../layout', { title: (email ? 'Edit Blog Email' : 'Add Blog Email') + ' - Outreach Admin', activePage: 'emails', content: content, user: user }) %>

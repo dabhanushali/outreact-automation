@@ -1,0 +1,155 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/campaigns">Campaigns</a></li>
+          <li class="breadcrumb-item active">${mode === 'create' ? 'New Campaign' : campaign.name}</li>
+        </ol>
+      </nav>
+      <h1><i class="bi bi-${mode === 'create' ? 'plus-circle' : 'pencil'}"></i> ${mode === 'create' ? 'New Campaign' : 'Edit Campaign'}</h1>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <form action="${mode === 'create' ? '/campaigns' : '/campaigns/' + campaign.id}" method="POST">
+            <div class="mb-3">
+              <label for="brand_id" class="form-label">Brand *</label>
+              <select class="form-select" id="brand_id" name="brand_id" required>
+                <option value="">Select a brand</option>
+${brands.map(brand => `
+                <option value="${brand.id}" ${campaign && campaign.brand_id === brand.id ? 'selected' : ''}>
+                  ${brand.name}
+                </option>`).join('')}
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label for="name" class="form-label">Campaign Name *</label>
+              <input type="text" class="form-control" id="name" name="name"
+                value="${campaign ? campaign.name : ''}" required>
+            </div>
+
+            <div class="mb-3">
+              <label for="target_url" class="form-label">Target URL</label>
+              <input type="url" class="form-control" id="target_url" name="target_url"
+                value="${campaign ? campaign.target_url : ''}"
+                placeholder="https://example.com">
+              <div class="form-text">The URL you want to promote (optional)</div>
+            </div>
+
+            <div class="mb-3">
+              <label for="keywords" class="form-label">Keywords</label>
+              <select class="form-select" id="keywords" name="keywords" multiple>
+${keywords.map(kw => `
+                <option value="${kw.phrase}"
+                  ${campaign && campaign.keywords.includes(kw.phrase) ? 'selected' : ''}>
+                  ${kw.phrase}
+                </option>`).join('')}
+              </select>
+              <div class="form-text">Hold Ctrl/Cmd to select multiple keywords</div>
+            </div>
+
+            <hr>
+
+            <div class="d-flex justify-content-between">
+              <a href="/campaigns" class="btn btn-secondary">
+                <i class="bi bi-x-circle"></i> Cancel
+              </a>
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-circle"></i> ${mode === 'create' ? 'Create Campaign' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+${mode === 'edit' && assets ? `
+      <div class="card mt-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-file-text"></i> Campaign Assets</span>
+          <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addAssetModal">
+            <i class="bi bi-plus-circle"></i> Add Asset
+          </button>
+        </div>
+        <div class="card-body">
+${assets.length > 0 ? `
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Title</th>
+                  <th>URL</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+${assets.map(asset => `
+                <tr>
+                  <td><span class="badge bg-${asset.type === 'blog' ? 'success' : 'info'}">${asset.type}</span></td>
+                  <td>${asset.title || '-'}</td>
+                  <td><a href="${asset.url}" target="_blank">${asset.url}</a></td>
+                  <td>${new Date(asset.created_at).toLocaleDateString()}</td>
+                  <td>
+                    <form method="POST" action="/campaigns/${campaign.id}/assets/${asset.id}/delete"
+                      onsubmit="return confirm('Are you sure?');">
+                      <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  </td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>` : `
+          <p class="text-muted mb-0">No assets yet. Add your first asset to get started.</p>`}
+        </div>
+      </div>` : ''}
+    </div>
+  </div>
+</div>
+
+<!-- Add Asset Modal -->
+${mode === 'edit' ? `
+<div class="modal fade" id="addAssetModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="/campaigns/${campaign.id}/assets">
+        <div class="modal-header">
+          <h5 class="modal-title">Add Campaign Asset</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="asset_type" class="form-label">Type</label>
+            <select class="form-select" id="asset_type" name="type" required>
+              <option value="blog">Blog Post</option>
+              <option value="page">Page</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="asset_title" class="form-label">Title</label>
+            <input type="text" class="form-control" id="asset_title" name="title">
+          </div>
+          <div class="mb-3">
+            <label for="asset_url" class="form-label">URL *</label>
+            <input type="url" class="form-control" id="asset_url" name="url" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Asset</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>` : ''}
+`;
+%>
+<%- include('../layout', { title: (mode === 'create' ? 'New Campaign' : 'Edit Campaign') + ' - Outreach Admin', activePage: 'campaigns', content: content, user: user }) %>

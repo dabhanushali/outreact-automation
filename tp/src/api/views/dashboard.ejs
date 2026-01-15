@@ -1,0 +1,631 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <h1><i class="bi bi-speedometer2"></i> Dashboard</h1>
+      <p class="text-muted">Overview of your outreach system</p>
+    </div>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card bg-primary text-white h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="card-title mb-1">Campaigns</h6>
+              <h2 class="mb-0">${stats.totalCampaigns}</h2>
+            </div>
+            <i class="bi bi-funnel fs-1 opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-success text-white h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="card-title mb-1">Prospects</h6>
+              <h2 class="mb-0">${stats.totalProspects}</h2>
+              <small>+${stats.totalBlogProspects} blogs</small>
+            </div>
+            <i class="bi bi-building fs-1 opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-info text-white h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="card-title mb-1">Emails</h6>
+              <h2 class="mb-0">${stats.totalEmails}</h2>
+              <small>+${stats.totalBlogEmails} blog emails</small>
+            </div>
+            <i class="bi bi-envelope fs-1 opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-warning text-dark h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="card-title mb-1">Leads</h6>
+              <h2 class="mb-0">${stats.totalLeads}</h2>
+            </div>
+            <i class="bi bi-link-45deg fs-1 opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email Queue Stats -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card border-primary">
+        <div class="card-body">
+          <div class="row align-items-center">
+            <div class="col-md-8">
+              <h6 class="mb-1"><i class="bi bi-envelope-paper"></i> Email Queue</h6>
+              <p class="mb-0 text-muted">
+                ${emailQueueStats.pending} pending emails • ${emailQueueStats.sentToday} sent today
+                ${emailQueueStats.pending > 0 ? ' • <a href="/email-outreach/queue">View queue</a>' : ''}
+              </p>
+            </div>
+            <div class="col-md-4 text-end">
+              <a href="/email-outreach" class="btn btn-primary btn-sm">
+                <i class="bi bi-gear"></i> Email Campaign
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions - Execute Scripts -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-play-circle"></i> Execute Scripts</span>
+          <button class="btn btn-sm btn-outline-primary" onclick="loadScripts()">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+          </button>
+        </div>
+        <div class="card-body">
+          <div class="row g-3" id="scriptButtons">
+            <div class="col-md-3">
+              <button class="btn btn-primary w-100" onclick="showCityModal()">
+                <i class="bi bi-building"></i><br>
+                <strong>City Search</strong><br>
+                <small class="text-white">Find prospects by city</small>
+              </button>
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-success w-100" onclick="showDirectoryModal()">
+                <i class="bi bi-list-stars"></i><br>
+                <strong>Directory Scraping</strong><br>
+                <small class="text-white">Scrape directories</small>
+              </button>
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-info w-100" onclick="executeScript('blog')">
+                <i class="bi bi-file-text"></i><br>
+                <strong>Blog Discovery</strong><br>
+                <small class="text-white">Find blog prospects</small>
+              </button>
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-warning w-100 text-dark" onclick="executeScript('extract-emails')">
+                <i class="bi bi-envelope"></i><br>
+                <strong>Extract Emails</strong><br>
+                <small class="text-dark">Extract from prospects</small>
+              </button>
+            </div>
+          </div>
+
+          <!-- Script Progress Display -->
+          <div id="scriptProgress" class="mt-3" style="display: none;">
+            <div class="card border-primary">
+              <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-activity"></i> Script Execution Progress</span>
+                <button class="btn btn-sm btn-outline-light" onclick="closeProgress()">
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </div>
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h6 class="mb-0" id="progressScriptType">City Search</h6>
+                  <span class="badge bg-primary" id="progressStatus">Running</span>
+                </div>
+                <div class="progress mb-2" style="height: 25px;">
+                  <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
+                </div>
+                <div id="progressMessage" class="text-muted small">Starting script...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Script Status Alert -->
+          <div id="scriptStatus" class="mt-3" style="display: none;">
+            <div class="alert alert-info mb-0">
+              <i class="bi bi-hourglass-split"></i> <span id="scriptStatusText">Executing...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Script Logs -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-journal-code"></i> Recent Script Executions</span>
+          <small class="text-muted">Last 5 executions</small>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-hover table-sm">
+              <thead>
+                <tr>
+                  <th>Script</th>
+                  <th>Status</th>
+                  <th>Message</th>
+                  <th>Progress</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="scriptLogsBody">
+                <tr>
+                  <td colspan="5" class="text-center text-muted py-4">Loading...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- City Search Modal -->
+  <div class="modal fade" id="cityModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-building"></i> City Search</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="cityInput" class="form-label">City Name</label>
+            <input type="text" class="form-control" id="cityInput" placeholder="e.g., Bangalore">
+            <div class="form-text">Enter the city name to search for prospects</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" onclick="executeCitySearch()">
+            <i class="bi bi-play-fill"></i> Start Search
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Directory Scraping Modal -->
+  <div class="modal fade" id="directoryModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-list-stars"></i> Directory Scraping</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="directorySelect" class="form-label">Select Directory</label>
+            <select class="form-select" id="directorySelect">
+              <option value="1">Clutch - India (10 cities)</option>
+              <option value="2">Clutch - USA (8 cities)</option>
+              <option value="3">Clutch - UK (6 cities)</option>
+              <option value="4">Clutch - Canada (5 cities)</option>
+              <option value="5">Clutch - Australia (5 cities)</option>
+              <option value="6">GoodFirms - India (8 cities)</option>
+              <option value="7">GoodFirms - USA (6 cities)</option>
+              <option value="8">GoodFirms - UK (3 cities)</option>
+              <option value="9">GoodFirms - Canada (2 cities)</option>
+              <option value="10">All Clutch directories (34 total)</option>
+              <option value="11">All GoodFirms directories (19 total)</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-success" onclick="executeDirectorySearch()">
+            <i class="bi bi-play-fill"></i> Start Scraping
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Today's Progress -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header bg-dark text-white">
+          <i class="bi bi-calendar-day"></i> Today's Progress
+        </div>
+        <div class="card-body">
+          <div class="row text-center">
+            <div class="col-md-3">
+              <h4>${stats.today.prospects_added}</h4>
+              <small class="text-muted">Prospects Added</small>
+            </div>
+            <div class="col-md-3">
+              <h4>${stats.today.emails_found}</h4>
+              <small class="text-muted">Emails Found</small>
+            </div>
+            <div class="col-md-3">
+              <h4>${stats.today.blog_assets_found}</h4>
+              <small class="text-muted">Blog Assets</small>
+            </div>
+            <div class="col-md-3">
+              <h4>${stats.today.outreach_sent}</h4>
+              <small class="text-muted">Outreach Sent</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts Row -->
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-graph-up"></i> Leads by Status
+        </div>
+        <div class="card-body">
+          <canvas id="leadsStatusChart"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-pie-chart"></i> Source Breakdown
+        </div>
+        <div class="card-body">
+          <canvas id="sourceChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Campaign Performance -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-bar-chart"></i> Campaign Performance
+        </div>
+        <div class="card-body">
+          <canvas id="campaignChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Activity -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-clock-history"></i> Recent Prospects
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th>Company</th>
+                  <th>City</th>
+                  <th>Source</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+`;
+recentProspects.forEach(prospect => {
+  content += `
+                <tr>
+                  <td><a href="/prospects/${prospect.id}">${prospect.domain}</a></td>
+                  <td>${prospect.company_name || '-'}</td>
+                  <td>${prospect.city || '-'}</td>
+                  <td><span class="badge bg-info">${prospect.last_source_type || 'unknown'}</span></td>
+                  <td>${new Date(prospect.created_at).toLocaleDateString()}</td>
+                </tr>
+`;
+});
+if (recentProspects.length === 0) {
+  content += `
+                <tr>
+                  <td colspan="5" class="text-center text-muted py-4">No prospects yet</td>
+                </tr>
+  `;
+}
+content += `
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+let scripts = `
+<script>
+// Progress polling interval
+let progressInterval = null;
+
+// Modal functions
+function showCityModal() {
+  const modal = new bootstrap.Modal(document.getElementById('cityModal'));
+  modal.show();
+}
+
+function showDirectoryModal() {
+  const modal = new bootstrap.Modal(document.getElementById('directoryModal'));
+  modal.show();
+}
+
+// Close progress display
+function closeProgress() {
+  document.getElementById('scriptProgress').style.display = 'none';
+}
+
+// Update progress display
+function updateProgressDisplay(script) {
+  const progressDiv = document.getElementById('scriptProgress');
+  const scriptTypeEl = document.getElementById('progressScriptType');
+  const statusEl = document.getElementById('progressStatus');
+  const progressBar = document.getElementById('progressBar');
+  const messageEl = document.getElementById('progressMessage');
+
+  if (!script) {
+    progressDiv.style.display = 'none';
+    return;
+  }
+
+  progressDiv.style.display = 'block';
+
+  // Set script type display
+  const scriptNames = {
+    'city': 'City Search',
+    'directory': 'Directory Scraping',
+    'blog': 'Blog Discovery',
+    'extract-emails': 'Email Extraction',
+    'extract-blog-emails': 'Blog Email Extraction'
+  };
+  scriptTypeEl.textContent = scriptNames[script.script_type] || script.script_type;
+
+  // Set status badge
+  statusEl.textContent = script.status.charAt(0).toUpperCase() + script.status.slice(1);
+  statusEl.className = 'badge ' + (
+    script.status === 'running' ? 'bg-primary' :
+    script.status === 'completed' ? 'bg-success' :
+    'bg-danger'
+  );
+
+  // Set progress bar
+  progressBar.style.width = script.progress + '%';
+  progressBar.textContent = script.progress + '%';
+  progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated' + (
+    script.status === 'completed' ? ' bg-success' :
+    script.status === 'failed' ? ' bg-danger' :
+    ' bg-primary'
+  );
+
+  // Set message
+  messageEl.textContent = script.message || 'Processing...';
+}
+
+// Poll for script progress
+function pollScriptProgress() {
+  fetch('/api/scripts/status')
+    .then(res => res.json())
+    .then(data => {
+      // Update progress display if there's a running script
+      updateProgressDisplay(data.running);
+
+      // Update recent logs table
+      updateLogsTable(data.recent);
+    })
+    .catch(error => {
+      console.error('Error polling script status:', error);
+    });
+}
+
+// Update logs table
+function updateLogsTable(logs) {
+  const tbody = document.getElementById('scriptLogsBody');
+
+  if (!logs || logs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No script executions yet</td></tr>';
+    return;
+  }
+
+  const scriptNames = {
+    'city': 'City Search',
+    'directory': 'Directory Scraping',
+    'blog': 'Blog Discovery',
+    'extract-emails': 'Email Extraction',
+    'extract-blog-emails': 'Blog Email Extraction'
+  };
+
+  tbody.innerHTML = logs.map(log => {
+    const statusClass = log.status === 'running' ? 'primary' :
+                        log.status === 'completed' ? 'success' : 'danger';
+    const time = new Date(log.created_at).toLocaleString();
+
+    return '<tr>' +
+      '<td>' + (scriptNames[log.script_type] || log.script_type) + '</td>' +
+      '<td><span class="badge bg-' + statusClass + '">' + log.status + '</span></td>' +
+      '<td>' + (log.message || '-') + '</td>' +
+      '<td>' + log.progress + '%</td>' +
+      '<td>' + time + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+// Script execution functions
+function executeScript(script, params = {}) {
+  if (!confirm('Start ' + script + ' script? This may take several minutes.')) {
+    return;
+  }
+
+  fetch('/api/scripts/execute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ script, ...params })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      // Start polling for progress
+      pollScriptProgress();
+    } else {
+      throw new Error(data.error || 'Unknown error');
+    }
+  })
+  .catch(error => {
+    alert('Failed to start script: ' + error.message);
+  });
+}
+
+function executeCitySearch() {
+  const city = document.getElementById('cityInput').value.trim();
+  if (!city) {
+    alert('Please enter a city name');
+    return;
+  }
+
+  // Close modal
+  const modalEl = document.getElementById('cityModal');
+  const modal = bootstrap.Modal.getInstance(modalEl);
+  modal.hide();
+
+  executeScript('city', { city });
+}
+
+function executeDirectorySearch() {
+  const directory = document.getElementById('directorySelect').value;
+  if (!directory) {
+    alert('Please select a directory');
+    return;
+  }
+
+  // Close modal
+  const modalEl = document.getElementById('directoryModal');
+  const modal = bootstrap.Modal.getInstance(modalEl);
+  modal.hide();
+
+  executeScript('directory', { directory });
+}
+
+// Start polling on page load
+pollScriptProgress();
+progressInterval = setInterval(pollScriptProgress, 2000); // Poll every 2 seconds
+
+// Chart initialization
+const leadStatuses = ${JSON.stringify(leadStatuses)};
+const sources = ${JSON.stringify(sourceBreakdown)};
+const campaigns = ${JSON.stringify(campaignPerformance)};
+
+// Lead Status Chart
+new Chart(document.getElementById('leadsStatusChart'), {
+  type: 'doughnut',
+  data: {
+    labels: leadStatuses.map(l => l.status),
+    datasets: [{
+      data: leadStatuses.map(l => l.count),
+      backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d']
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'bottom' }
+    }
+  }
+});
+
+// Source Chart
+new Chart(document.getElementById('sourceChart'), {
+  type: 'pie',
+  data: {
+    labels: sources.map(s => s.source),
+    datasets: [{
+      data: sources.map(s => s.count),
+      backgroundColor: ['#0d6efd', '#20c997', '#ffc107', '#fd7e14', '#dc3545', '#6f42c1', '#d63384']
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'bottom' }
+    }
+  }
+});
+
+// Campaign Performance Chart
+new Chart(document.getElementById('campaignChart'), {
+  type: 'bar',
+  data: {
+    labels: campaigns.map(c => c.name),
+    datasets: [
+      {
+        label: 'Prospects',
+        data: campaigns.map(c => c.prospect_count),
+        backgroundColor: '#0d6efd'
+      },
+      {
+        label: 'Emails',
+        data: campaigns.map(c => c.email_count),
+        backgroundColor: '#20c997'
+      },
+      {
+        label: 'Outreach',
+        data: campaigns.map(c => c.outreach_count),
+        backgroundColor: '#ffc107'
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    scales: {
+      y: { beginAtZero: true }
+    },
+    plugins: {
+      legend: { position: 'top' }
+    }
+  }
+});
+</script>
+`;
+%>
+<%- include('layout', { title: 'Dashboard - Outreach Admin', activePage: 'dashboard', content: content, scripts: scripts, user: user }) %>

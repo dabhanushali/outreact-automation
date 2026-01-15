@@ -1,0 +1,227 @@
+import express from 'express';
+import { db } from '../../database/db.js';
+
+const router = express.Router();
+
+// List all leads with filters (now shows blog leads for link exchange/guest posts)
+router.get('/leads', (req, res) => {
+  try {
+    const { campaign, status, source } = req.query;
+
+    let query = `
+      SELECT
+        bl.*,
+        bp.domain,
+        bp.blog_name,
+        c.name as campaign_name,
+        b.name as brand_name,
+        be.email
+      FROM blog_leads bl
+      LEFT JOIN blog_prospects bp ON bl.blog_prospect_id = bp.id
+      LEFT JOIN campaigns c ON bl.campaign_id = c.id
+      LEFT JOIN brands b ON c.brand_id = b.id
+      LEFT JOIN blog_emails be ON bp.id = be.blog_prospect_id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (campaign) {
+      query += ' AND bl.campaign_id = ?';
+      params.push(campaign);
+    }
+
+    if (status) {
+      query += ' AND bl.status = ?';
+      params.push(status);
+    }
+
+    if (source) {
+      query += ' AND bl.source_type = ?';
+      params.push(source);
+    }
+
+    query += ' ORDER BY bl.found_at DESC LIMIT 500';
+
+    const leads = db.prepare(query).all(...params);
+
+    // Get filter options
+    const campaigns = db.prepare('SELECT id, name FROM campaigns ORDER BY name').all();
+    const statuses = ['NEW', 'READY', 'OUTREACH_SENT', 'REPLIED', 'REJECTED'];
+    const sources = db.prepare(`
+      SELECT DISTINCT source_type
+      FROM blog_leads
+      WHERE source_type IS NOT NULL
+      ORDER BY source_type
+    `).all().map(s => s.source_type);
+
+    res.render('leads/list', {
+      leads,
+      campaigns,
+      statuses,
+      sources,
+      filters: { campaign, status, source },
+      user: req.session
+    });
+  } catch (error) {
+    console.error('Error loading leads:', error);
+    res.status(500).render('error', { error: 'Failed to load leads', user: req.session });
+  }
+});
+
+// View single blog lead
+router.get('/leads/:id', (req, res) => {
+  try {
+    const lead = db.prepare(`
+      SELECT
+        bl.*,
+        bp.domain,
+        bp.blog_name,
+        bp.website_url as blog_website_url,
+        c.name as campaign_name,
+        c.id as campaign_id,
+        b.name as brand_name,
+        b.id as brand_id
+      FROM blog_leads bl
+      JOIN blog_prospects bp ON bl.blog_prospect_id = bp.id
+      JOIN campaigns c ON bl.campaign_id = c.id
+      JOIN brands b ON c.brand_id = b.id
+      WHERE bl.id = ?
+    `).get(req.params.id);
+
+    if (!lead) {
+      return res.status(404).render('error', { error: 'Lead not found', user: req.session });
+    }
+
+    // Get emails for this blog prospect
+    const emails = db.prepare(`
+      SELECT * FROM blog_emails WHERE blog_prospect_id = ?
+    `).all(lead.blog_prospect_id);
+
+    // Get campaign assets for outreach
+    const assets = db.prepare(`
+      SELECT * FROM campaign_assets WHERE campaign_id = ?
+    `).all(lead.campaign_id);
+
+    // Get outreach logs for this lead
+    const outreachLogs = db.prepare(`
+      SELECT
+        ol.*,
+        ca.title as asset_title,
+        ca.url as asset_url,
+        be.email
+      FROM outreach_logs ol
+      LEFT JOIN campaign_assets ca ON ol.asset_id = ca.id
+      LEFT JOIN blog_emails be ON ol.email_id = be.id
+      WHERE ol.lead_id = ?
+      ORDER BY ol.sent_at DESC
+    `).all(lead.id);
+
+    res.render('leads/detail', {
+      lead,
+      emails,
+      assets,
+      outreachLogs,
+      user: req.session
+    });
+  } catch (error) {
+    console.error('Error loading lead details:', error);
+    res.status(500).render('error', { error: 'Failed to load lead details', user: req.session });
+  }
+});
+
+// Update lead status
+router.post('/leads/:id/status', (req, res) => {
+  try {
+    const { status } = req.body;
+    const id = req.params.id;
+
+    const stmt = db.prepare('UPDATE blog_leads SET status = ? WHERE id = ?');
+    stmt.run(status, id);
+
+    res.redirect('/leads');
+  } catch (error) {
+    console.error('Error updating lead status:', error);
+    res.status(500).render('error', { error: 'Failed to update lead status: ' + error.message, user: req.session });
+  }
+});
+
+// Bulk update lead status
+router.post('/leads/bulk-update', (req, res) => {
+  try {
+    const { lead_ids, status } = req.body;
+
+    if (!Array.isArray(lead_ids) || lead_ids.length === 0) {
+      return res.redirect('/leads');
+    }
+
+    const stmt = db.prepare('UPDATE blog_leads SET status = ? WHERE id = ?');
+    const updateMany = db.transaction((ids) => {
+      for (const id of ids) {
+        stmt.run(status, id);
+      }
+    });
+
+    updateMany(lead_ids);
+
+    res.redirect('/leads');
+  } catch (error) {
+    console.error('Error bulk updating leads:', error);
+    res.status(500).render('error', { error: 'Failed to bulk update leads: ' + error.message, user: req.session });
+  }
+});
+
+// Outreach logs
+router.get('/outreach-logs', (req, res) => {
+  try {
+    const { campaign, status } = req.query;
+
+    let query = `
+      SELECT
+        ol.*,
+        p.domain,
+        p.company_name,
+        c.name as campaign_name,
+        ca.title as asset_title,
+        e.email
+      FROM outreach_logs ol
+      LEFT JOIN leads l ON ol.lead_id = l.id
+      LEFT JOIN prospects p ON l.prospect_id = p.id
+      LEFT JOIN campaigns c ON l.campaign_id = c.id
+      LEFT JOIN campaign_assets ca ON ol.asset_id = ca.id
+      LEFT JOIN emails e ON ol.email_id = e.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (campaign) {
+      query += ' AND l.campaign_id = ?';
+      params.push(campaign);
+    }
+
+    if (status) {
+      query += ' AND ol.status = ?';
+      params.push(status);
+    }
+
+    query += ' ORDER BY ol.sent_at DESC LIMIT 500';
+
+    const logs = db.prepare(query).all(...params);
+
+    // Get filter options
+    const campaigns = db.prepare('SELECT id, name FROM campaigns ORDER BY name').all();
+    const statuses = ['SENT', 'OPENED', 'REPLIED', 'REJECTED'];
+
+    res.render('leads/outreach-logs', {
+      logs,
+      campaigns,
+      statuses,
+      filters: { campaign, status },
+      user: req.session
+    });
+  } catch (error) {
+    console.error('Error loading outreach logs:', error);
+    res.status(500).render('error', { error: 'Failed to load outreach logs', user: req.session });
+  }
+});
+
+export default router;

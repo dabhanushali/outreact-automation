@@ -26,20 +26,29 @@ import readline from "readline";
 // Parse command line args
 const args = process.argv.slice(2);
 
-// Parse --mode=value or --mode value
-let modeFlag = null;
-const modeIndex = args.findIndex((a) => a === "--mode");
-if (modeIndex !== -1 && args[modeIndex + 1]) {
-  modeFlag = args[modeIndex + 1];
-} else {
-  const modeEqual = args.find((a) => a.startsWith("--mode="));
-  if (modeEqual) {
-    modeFlag = modeEqual.split("=")[1];
+// Helper to parse --flag=value or --flag value
+function parseArg(flagName) {
+  const flagIndex = args.findIndex((a) => a === `--${flagName}`);
+  if (flagIndex !== -1 && args[flagIndex + 1]) {
+    return args[flagIndex + 1];
   }
+  const flagEqual = args.find((a) => a.startsWith(`--${flagName}=`));
+  if (flagEqual) {
+    return flagEqual.split("=")[1];
+  }
+  return null;
 }
+
+// Parse --mode=value or --mode value
+let modeFlag = parseArg('mode');
 
 const statsFlag = args.includes("--stats");
 const resetFlag = args.includes("--reset");
+
+// Additional arguments for non-interactive mode
+const cityArg = parseArg('city');
+const directoryArg = parseArg('directory');
+const limitArg = parseArg('limit');
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -158,7 +167,12 @@ async function main() {
       case "1":
       case "city":
         // City Search Mode
-        const city = await question("Enter city name (e.g., Bangalore): ");
+        let city = cityArg;
+        if (!city) {
+          city = await question("Enter city name (e.g., Bangalore): ");
+        } else {
+          console.log(`Using city: ${city}`);
+        }
         await OutreachOrchestrator.runCitySearch(city, brandId, campaignId);
         break;
 
@@ -167,7 +181,10 @@ async function main() {
         // Directory Scraping Mode
         const allDirs = DirectoryScraperService.getDirectoryUrls();
 
-        console.log(`
+        let dirChoice = directoryArg;
+
+        if (!dirChoice) {
+          console.log(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                     SELECT DIRECTORIES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -188,7 +205,10 @@ async function main() {
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `);
 
-        const dirChoice = await question("Enter choice (1-12): ");
+          dirChoice = await question("Enter choice (1-12): ");
+        } else {
+          console.log(`Using directory choice: ${dirChoice}`);
+        }
 
         let dirUrls = [];
 
@@ -250,9 +270,13 @@ async function main() {
       case "3":
       case "queries":
         // Database Queries Mode
-        const limit =
-          (await question("How many queries to process? (default: 10): ")) ||
-          "10";
+        let limit = limitArg || "10";
+        if (!limitArg) {
+          const limitInput = await question("How many queries to process? (default: 10): ");
+          limit = limitInput || "10";
+        } else {
+          console.log(`Processing ${limit} queries`);
+        }
         await OutreachOrchestrator.runFromSearchQueries(parseInt(limit));
         break;
 

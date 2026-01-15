@@ -1,0 +1,138 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+          <li class="breadcrumb-item"><a href="/settings/daily-limits">Settings</a></li>
+          <li class="breadcrumb-item active">Exclusions</li>
+        </ol>
+      </nav>
+      <h1><i class="bi bi-ban"></i> Domain & Email Exclusions</h1>
+      <p class="text-muted">Manage domains and emails to skip during outreach</p>
+    </div>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card bg-primary text-white">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="card-title mb-1">Excluded Domains</h6>
+              <h2 class="mb-0">${exclusions.filter(e => e.type === 'domain').length}</h2>
+            </div>
+            <i class="bi bi-globe fs-1 opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card bg-success text-white">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h6 class="card-title mb-1">Excluded Emails</h6>
+              <h2 class="mb-0">${exclusions.filter(e => e.type === 'email').length}</h2>
+            </div>
+            <i class="bi bi-envelope fs-1 opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Exclusion Form -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-plus-circle"></i> Add Exclusion
+        </div>
+        <div class="card-body">
+          <form method="POST" action="/settings/exclusions">
+            <div class="row g-3">
+              <div class="col-md-2">
+                <label class="form-label">Type</label>
+                <select name="type" class="form-select" required>
+                  <option value="domain">Domain</option>
+                  <option value="email">Email</option>
+                </select>
+              </div>
+              <div class="col-md-5">
+                <label class="form-label">Value</label>
+                <input type="text" name="value" class="form-control" placeholder="example.com or info@example.com" required>
+                <div class="form-text">Enter domain (without www.) or email address</div>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Reason (optional)</label>
+                <input type="text" name="reason" class="form-control" placeholder="Already reached out">
+              </div>
+              <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                  <i class="bi bi-plus-lg"></i> Add
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Exclusions List -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-list"></i> All Exclusions</span>
+          <small class="text-muted">${exclusions.length} total</small>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-hover table-sm">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Value</th>
+                  <th>Reason</th>
+                  <th>Added</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+${exclusions.length > 0 ? exclusions.map(ex => `
+                <tr>
+                  <td>
+                    <span class="badge ${ex.type === 'domain' ? 'bg-primary' : 'bg-success'}">
+                      ${ex.type.toUpperCase()}
+                    </span>
+                  </td>
+                  <td><code>${ex.value}</code></td>
+                  <td>${ex.reason || '-'}</td>
+                  <td>${new Date(ex.added_at).toLocaleDateString()}</td>
+                  <td>
+                    <form method="POST" action="/settings/exclusions/${ex.id}/delete" class="d-inline">
+                      <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove this exclusion?')">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  </td>
+                </tr>`).join('') : `
+                <tr>
+                  <td colspan="5" class="text-center text-muted py-4">No exclusions found</td>
+                </tr>`}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+%>
+<%- include('../layout', { title: 'Exclusions - Settings', activePage: 'settings', content: content, user: user }) %>

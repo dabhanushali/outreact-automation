@@ -1,0 +1,95 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/settings/brands">Settings</a></li>
+          <li class="breadcrumb-item active">Brands</li>
+        </ol>
+      </nav>
+      <h1><i class="bi bi-tag"></i> Brands</h1>
+      <p class="text-muted">Manage your brands</p>
+    </div>
+  </div>
+
+  <!-- Add Brand Form -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-plus-circle"></i> Add New Brand
+        </div>
+        <div class="card-body">
+          <form method="POST" action="/settings/brands" class="row g-3">
+            <div class="col-md-5">
+              <input type="text" name="name" class="form-control" placeholder="Brand Name" required>
+            </div>
+            <div class="col-md-5">
+              <input type="url" name="website" class="form-control" placeholder="Website URL">
+            </div>
+            <div class="col-md-2">
+              <button type="submit" class="btn btn-primary w-100">Add Brand</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Brands Table -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Website</th>
+                  <th>Campaigns</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+${brands.map(brand => `
+                <tr>
+                  <td>${brand.id}</td>
+                  <td><strong>${brand.name}</strong></td>
+                  <td>${brand.website ? `<a href="${brand.website}" target="_blank">${brand.website}</a>` : '-'}</td>
+                  <td><span class="badge bg-info">${brand.campaign_count || 0}</span></td>
+                  <td>${new Date(brand.created_at).toLocaleDateString()}</td>
+                  <td>
+${(brand.campaign_count || 0) === 0 ? `
+                        <form method="POST" action="/settings/brands/${brand.id}/delete"
+                          onsubmit="return confirm('Delete this brand?');"
+                          style="display: inline;">
+                          <button class="btn btn-sm btn-outline-danger">
+                            <i class="bi bi-trash"></i>
+                          </button>
+                        </form>` : `
+                        <button class="btn btn-sm btn-outline-secondary" disabled title="Has campaigns">
+                          <i class="bi bi-trash"></i>
+                        </button>`}
+                  </td>
+                </tr>`).join('')}
+
+${brands.length === 0 ? `
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-4">No brands found.</td>
+                </tr>` : ''}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+%>
+<%- include('../layout', { title: 'Brands - Settings', activePage: 'settings', content: content, user: user }) %>

@@ -5,7 +5,12 @@
       "Bash(sqlite3:*)",
       "Bash(node migrate-add-blog-source.js:*)",
       "Bash(npm run outreach:blog:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npm install:*)",
+      "Bash(timeout:*)",
+      "Bash(curl:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_run_code"
     ]
   }
 }

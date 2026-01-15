@@ -176,6 +176,37 @@ function initSchema() {
   `);
 
   /* =========================
+     BLOG LEADS (Blog Prospect × Campaign)
+  ========================= */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS blog_leads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      brand_id INTEGER NOT NULL,
+      campaign_id INTEGER NOT NULL,
+      blog_prospect_id INTEGER NOT NULL,
+      status TEXT CHECK(status IN (
+        'NEW',
+        'READY',
+        'OUTREACH_SENT',
+        'REPLIED',
+        'REJECTED'
+      )) DEFAULT 'NEW',
+      source_type TEXT CHECK(source_type IN (
+        'blog',
+        'google',
+        'directory',
+        'other'
+      )),
+      source_query TEXT,
+      found_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (brand_id) REFERENCES brands(id),
+      FOREIGN KEY (campaign_id) REFERENCES campaigns(id),
+      FOREIGN KEY (blog_prospect_id) REFERENCES blog_prospects(id),
+      UNIQUE (campaign_id, blog_prospect_id)
+    );
+  `);
+
+  /* =========================
      OUTREACH LOGS (PER BLOG)
   ========================= */
   db.exec(`
@@ -195,6 +226,64 @@ function initSchema() {
       FOREIGN KEY (asset_id) REFERENCES campaign_assets(id),
       FOREIGN KEY (email_id) REFERENCES emails(id),
       UNIQUE (lead_id, asset_id)
+    );
+  `);
+
+  /* =========================
+     EMAIL OUTREACH: TEMPLATES
+  ========================= */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      variables TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  /* =========================
+     EMAIL OUTREACH: QUEUE
+  ========================= */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL,
+      email_id INTEGER NOT NULL,
+      template_id INTEGER NOT NULL,
+      to_email TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT CHECK(status IN ('pending', 'sending', 'sent', 'failed')) DEFAULT 'pending',
+      scheduled_for DATETIME DEFAULT CURRENT_TIMESTAMP,
+      sent_at DATETIME,
+      error_message TEXT,
+      attempts INTEGER DEFAULT 0,
+      message_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (lead_id) REFERENCES leads(id),
+      FOREIGN KEY (email_id) REFERENCES emails(id),
+      FOREIGN KEY (template_id) REFERENCES email_templates(id)
+    );
+  `);
+
+  /* =========================
+     EMAIL OUTREACH: SMTP CONFIG
+  ========================= */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS smtp_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      host TEXT NOT NULL,
+      port INTEGER NOT NULL,
+      secure INTEGER DEFAULT 0,
+      user TEXT,
+      password TEXT,
+      from_name TEXT,
+      from_email TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
@@ -221,6 +310,33 @@ function initSchema() {
       emails_found INTEGER DEFAULT 0,
       blog_assets_found INTEGER DEFAULT 0,
       outreach_sent INTEGER DEFAULT 0
+    );
+  `);
+
+  /* =========================
+     SCRIPT EXECUTION LOGS
+  ========================= */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS script_execution_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      script_type TEXT NOT NULL,
+      status TEXT CHECK(status IN ('running', 'completed', 'failed')) DEFAULT 'running',
+      message TEXT,
+      progress INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  /* =========================
+     SYSTEM SETTINGS
+  ========================= */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      description TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
@@ -286,8 +402,12 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_blog_emails_prospect ON blog_emails(blog_prospect_id);
     CREATE INDEX IF NOT EXISTS idx_leads_campaign ON leads(campaign_id);
     CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+    CREATE INDEX IF NOT EXISTS idx_blog_leads_campaign ON blog_leads(campaign_id);
+    CREATE INDEX IF NOT EXISTS idx_blog_leads_status ON blog_leads(status);
     CREATE INDEX IF NOT EXISTS idx_outreach_lead ON outreach_logs(lead_id);
     CREATE INDEX IF NOT EXISTS idx_exclusions_value ON exclusions(value);
+    CREATE INDEX IF NOT EXISTS idx_email_queue_status ON email_queue(status);
+    CREATE INDEX IF NOT EXISTS idx_email_queue_scheduled ON email_queue(scheduled_for);
   `);
 
   console.log("Schema Initialization Complete ✅");
@@ -454,6 +574,24 @@ function populateInitialData() {
 
   insertMany(queries);
   console.log(`  ✓ Generated ${queries.length} search queries`);
+
+  // 6. Insert default system settings
+  const defaultSettings = [
+    { key: 'daily_prospect_limit', value: '10', description: 'Maximum number of prospects to add per day' },
+    { key: 'daily_blog_limit', value: '10', description: 'Maximum number of blog assets to find per day' },
+    { key: 'daily_email_limit', value: '50', description: 'Maximum number of emails to extract per day' },
+    { key: 'daily_outreach_limit', value: '20', description: 'Maximum number of outreach emails to send per day' }
+  ];
+
+  const insertSetting = db.prepare(
+    "INSERT OR IGNORE INTO system_settings (key, value, description) VALUES (?, ?, ?)"
+  );
+
+  for (const setting of defaultSettings) {
+    insertSetting.run(setting.key, setting.value, setting.description);
+  }
+  console.log(`  ✓ Inserted ${defaultSettings.length} system settings`);
+
   console.log("Initial data population complete ✅");
 }
 

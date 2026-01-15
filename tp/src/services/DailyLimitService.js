@@ -5,8 +5,73 @@ import { db } from "../database/db.js";
  * Tracks and enforces daily limits for prospect/email/blog asset collection
  */
 export class DailyLimitService {
-  static DAILY_PROSPECT_LIMIT = 10; // Target: 100 companies per day
-  static DAILY_BLOG_LIMIT = 10; // Target: 100 blog assets per day (same as prospects)
+  /**
+   * Get a setting value from database
+   * @param {string} key - Setting key
+   * @param {number} defaultValue - Default value if not found
+   * @returns {number} - Setting value
+   */
+  static getSetting(key, defaultValue = 10) {
+    try {
+      const result = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(key);
+      return result ? parseInt(result.value) : defaultValue;
+    } catch (error) {
+      console.error(`Error getting setting ${key}:`, error);
+      return defaultValue;
+    }
+  }
+
+  /**
+   * Set a setting value in database
+   * @param {string} key - Setting key
+   * @param {number} value - Setting value
+   */
+  static setSetting(key, value) {
+    try {
+      db.prepare(`
+        INSERT INTO system_settings (key, value, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET
+          value = excluded.value,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(key, value.toString());
+    } catch (error) {
+      console.error(`Error setting ${key}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get daily prospect limit (from database)
+   * @returns {number} - Daily prospect limit
+   */
+  static get DAILY_PROSPECT_LIMIT() {
+    return this.getSetting('daily_prospect_limit', 10);
+  }
+
+  /**
+   * Get daily blog limit (from database)
+   * @returns {number} - Daily blog limit
+   */
+  static get DAILY_BLOG_LIMIT() {
+    return this.getSetting('daily_blog_limit', 10);
+  }
+
+  /**
+   * Get daily email limit (from database)
+   * @returns {number} - Daily email limit
+   */
+  static get DAILY_EMAIL_LIMIT() {
+    return this.getSetting('daily_email_limit', 50);
+  }
+
+  /**
+   * Get daily outreach limit (from database)
+   * @returns {number} - Daily outreach limit
+   */
+  static get DAILY_OUTREACH_LIMIT() {
+    return this.getSetting('daily_outreach_limit', 20);
+  }
 
   /**
    * Get today's date string
@@ -100,6 +165,15 @@ export class DailyLimitService {
   }
 
   /**
+   * Check if email daily limit reached
+   * @returns {boolean} - True if limit reached
+   */
+  static isEmailLimitReached() {
+    const stats = this.getTodayStats();
+    return stats.emails_found >= this.DAILY_EMAIL_LIMIT;
+  }
+
+  /**
    * Check if any daily limit reached (legacy method for backward compatibility)
    * @returns {boolean} - True if any limit reached
    */
@@ -123,6 +197,15 @@ export class DailyLimitService {
   static getBlogRemaining() {
     const stats = this.getTodayStats();
     return Math.max(0, this.DAILY_BLOG_LIMIT - stats.blog_assets_found);
+  }
+
+  /**
+   * Get remaining email count for today
+   * @returns {number} - Remaining emails that can be extracted
+   */
+  static getEmailRemaining() {
+    const stats = this.getTodayStats();
+    return Math.max(0, this.DAILY_EMAIL_LIMIT - stats.emails_found);
   }
 
   /**
@@ -158,6 +241,7 @@ export class DailyLimitService {
     const progress = this.getProgress();
     const blogRemaining = this.getBlogRemaining();
     const blogProgress = this.getBlogProgress();
+    const emailRemaining = this.getEmailRemaining();
 
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`           DAILY LIMIT STATS (${stats.date})          `);
@@ -165,15 +249,16 @@ export class DailyLimitService {
     console.log(
       `  Prospects Added:    ${stats.prospects_added}/${this.DAILY_PROSPECT_LIMIT}`
     );
-    console.log(`  Emails Found:       ${stats.emails_found}`);
+    console.log(`  Emails Found:       ${stats.emails_found}/${this.DAILY_EMAIL_LIMIT}`);
     console.log(
       `  Blog Assets Found:  ${stats.blog_assets_found}/${this.DAILY_BLOG_LIMIT}`
     );
+    console.log(`  Outreach Sent:      ${stats.outreach_sent}/${this.DAILY_OUTREACH_LIMIT}`);
     console.log(
       `  Progress:           ${progress}% (prospects), ${blogProgress}% (blogs)`
     );
     console.log(
-      `  Remaining:          ${remaining} prospects, ${blogRemaining} blogs`
+      `  Remaining:          ${remaining} prospects, ${blogRemaining} blogs, ${emailRemaining} emails`
     );
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
   }
@@ -189,5 +274,45 @@ export class DailyLimitService {
     );
     stmt.run(today);
     console.log(`Reset stats for ${today}`);
+  }
+
+  /**
+   * Get all limit settings
+   * @returns {Object} - All limit settings
+   */
+  static getAllLimits() {
+    return {
+      prospect_limit: this.DAILY_PROSPECT_LIMIT,
+      blog_limit: this.DAILY_BLOG_LIMIT,
+      email_limit: this.DAILY_EMAIL_LIMIT,
+      outreach_limit: this.DAILY_OUTREACH_LIMIT
+    };
+  }
+
+  /**
+   * Update limit settings
+   * @param {Object} limits - Object with limit values
+   */
+  static updateLimits(limits) {
+    if (limits.prospect_limit !== undefined) {
+      this.setSetting('daily_prospect_limit', limits.prospect_limit);
+    }
+    if (limits.blog_limit !== undefined) {
+      this.setSetting('daily_blog_limit', limits.blog_limit);
+    }
+    if (limits.email_limit !== undefined) {
+      this.setSetting('daily_email_limit', limits.email_limit);
+    }
+    if (limits.outreach_limit !== undefined) {
+      this.setSetting('daily_outreach_limit', limits.outreach_limit);
+    }
+  }
+
+  /**
+   * Get all system settings
+   * @returns {Array} - All system settings
+   */
+  static getAllSettings() {
+    return db.prepare('SELECT * FROM system_settings ORDER BY key').all();
   }
 }

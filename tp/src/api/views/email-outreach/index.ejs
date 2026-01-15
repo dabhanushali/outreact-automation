@@ -1,0 +1,130 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <h1><i class="bi bi-envelope-paper"></i> Email Outreach</h1>
+      <p class="text-muted">Manage email campaigns and templates</p>
+    </div>
+  </div>
+
+  <!-- Quick Stats -->
+  <div class="row mb-4">
+    <div class="col-md-3">
+      <div class="card border-primary">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">Pending in Queue</h6>
+          <h2 class="card-title text-primary">${stats.pending}</h2>
+          <small class="text-muted">emails waiting to be sent</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-success">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">Sent Today</h6>
+          <h2 class="card-title text-success">${stats.sentToday}</h2>
+          <small class="text-muted">emails sent successfully</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-warning">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">Active Templates</h6>
+          <h2 class="card-title text-warning">${templates.length}</h2>
+          <small class="text-muted">email templates available</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-info">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">Failed Today</h6>
+          <h2 class="card-title text-info">${stats.failed}</h2>
+          <small class="text-muted">emails that failed to send</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header bg-primary text-white">
+          <i class="bi bi-lightning-charge"></i> Quick Actions
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <div class="d-grid">
+                <a href="/email-outreach/templates" class="btn btn-outline-primary">
+                  <i class="bi bi-file-earmark-text"></i> Manage Templates
+                </a>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="d-grid">
+                <a href="/email-outreach/queue" class="btn btn-outline-success">
+                  <i class="bi bi-list-ul"></i> View Email Queue
+                </a>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="d-grid">
+                <a href="/email-outreach/smtp" class="btn btn-outline-info">
+                  <i class="bi bi-gear"></i> SMTP Configuration
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Activity -->
+  <div class="row">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-clock-history"></i> Recent Templates
+        </div>
+        <div class="card-body">
+          ${templates.length === 0 ? `
+            <p class="text-muted mb-0">No templates yet. <a href="/email-outreach/templates">Create your first template</a>.</p>
+          ` : templates.slice(0, 5).map(t => `
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div>
+                <strong>${t.name}</strong>
+                <br><small class="text-muted">${t.subject}</small>
+              </div>
+              <span class="badge bg-${t.is_active ? 'success' : 'secondary'}">${t.is_active ? 'Active' : 'Inactive'}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-info-circle"></i> How It Works
+        </div>
+        <div class="card-body">
+          <ol class="mb-0">
+            <li class="mb-2">Configure your <a href="/email-outreach/smtp">SMTP settings</a></li>
+            <li class="mb-2">Create email <a href="/email-outreach/templates">templates</a> with variables like {{name}}, {{company}}</li>
+            <li class="mb-2">Go to <a href="/leads">Leads</a> and add READY leads to the queue</li>
+            <li class="mb-2">Run <code>node run-email-sender.js</code> to send queued emails</li>
+            <li>Each email is sent individually with random delays (30-60s) to avoid spam filters</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+%>
+<%- include('../layout', { title: 'Email Outreach - Outreach Admin', activePage: 'email-outreach', content: content, user: user }) %>

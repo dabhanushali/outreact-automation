@@ -1,6 +1,7 @@
 import { db } from "../database/db.js";
 import { ProspectRepo } from "../repositories/ProspectRepo.js";
 import { BlogProspectRepo } from "../repositories/BlogProspectRepo.js";
+import { BlogLeadRepo } from "../repositories/BlogLeadRepo.js";
 import { EmailRepo } from "../repositories/EmailRepo.js";
 import { BlogEmailRepo } from "../repositories/BlogEmailRepo.js";
 import { GoogleSearch } from "./GoogleSearch.js";
@@ -616,6 +617,14 @@ export class OutreachOrchestrator {
         return;
       }
 
+      // Step 2: Check exclusions table (already contacted)
+      const { ExclusionRepo } = await import('../repositories/ExclusionRepo.js');
+      if (ExclusionRepo.isExcluded(domain)) {
+        const reason = ExclusionRepo.getExclusionReason(domain);
+        console.log(`  ⊗ SKIP: ${domain} (excluded - ${reason?.reason || 'already reached out'})`);
+        return;
+      }
+
       console.log(`  → Processing: ${companyName || domain} (${domain})`);
 
       // Step 2: Site Verification (Keyword/AI Check)
@@ -644,21 +653,12 @@ export class OutreachOrchestrator {
         return;
       }
 
-      // Create lead
-      ProspectRepo.createLead(
-        brandId,
-        campaignId,
-        prospectId,
-        sourceQuery,
-        sourceType
-      );
-
       // Increment daily counter
       DailyLimitService.incrementProspects();
 
       console.log(`    ✓ Prospect added (ID: ${prospectId})`);
       console.log(
-        `    ℹ Emails will be extracted at end of discovery`
+        `    ℹ Company prospects tracked for reference. Use blog discovery for outreach.`
       );
     } catch (error) {
       console.error(`  ✗ Error processing ${websiteUrl}: ${error.message}`);
@@ -887,6 +887,19 @@ export class OutreachOrchestrator {
 
       // Mark as processed
       BlogProspectRepo.markEmailsExtracted(blogProspect.id);
+
+      // Update blog lead status
+      const bestEmail = BlogEmailRepo.getBestEmail(blogProspect.id);
+      if (bestEmail) {
+        // Has email → Ready for outreach
+        db.prepare("UPDATE blog_leads SET status = ? WHERE blog_prospect_id = ?").run(
+          "READY",
+          blogProspect.id
+        );
+        console.log(`  ✓ Blog lead status: READY (has email)`);
+      } else {
+        console.log(`  ℹ Blog lead status: NEW (no email found)`);
+      }
 
       processed++;
 

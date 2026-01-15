@@ -1,4 +1,5 @@
 import { db } from "../database/db.js";
+import { BlogLeadRepo } from "./BlogLeadRepo.js";
 
 export class BlogProspectRepo {
   static create(domain, blogName, websiteUrl, sourceQuery = null, sourceType = "blog") {
@@ -38,9 +39,10 @@ export class BlogProspectRepo {
   }
 
   static linkToCampaign(brandId, campaignId, blogProspectId, sourceQuery, sourceType = "blog") {
-    // Since we don't have a leads table for blog prospects yet,
-    // this method can be expanded later when blog outreach is implemented
-    // For now, we just update the source information on the blog prospect
+    // Create a blog lead when blog prospect is linked to campaign
+    BlogLeadRepo.createLead(brandId, campaignId, blogProspectId, sourceQuery, sourceType);
+
+    // Update source information on the blog prospect
     const updateProspect = db.prepare(`
       UPDATE blog_prospects
       SET last_source_type = ?,

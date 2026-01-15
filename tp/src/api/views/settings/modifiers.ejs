@@ -1,0 +1,101 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/settings/modifiers">Settings</a></li>
+          <li class="breadcrumb-item active">Search Modifiers</li>
+        </ol>
+      </nav>
+      <h1><i class="bi bi-sliders"></i> Search Modifiers</h1>
+      <p class="text-muted">Manage search modifiers for blog discovery</p>
+    </div>
+  </div>
+
+  <!-- Add Modifier Form -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-plus-circle"></i> Add New Modifier
+        </div>
+        <div class="card-body">
+          <form method="POST" action="/settings/modifiers" class="row g-3">
+            <div class="col-md-3">
+              <select name="category" class="form-select" required>
+                <option value="">Category</option>
+                <option value="guest_post">Guest Post</option>
+                <option value="resource">Resource</option>
+                <option value="link_submission">Link Submission</option>
+                <option value="listicle">Listicle</option>
+              </select>
+            </div>
+            <div class="col-md-7">
+              <input type="text" name="modifier" class="form-control" placeholder="Search modifier (e.g., 'write for us')" required>
+            </div>
+            <div class="col-md-2">
+              <button type="submit" class="btn btn-primary w-100">Add</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modifiers Table -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Modifier</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+${modifiers.map(mod => {
+                let catColor = 'secondary';
+                switch(mod.category) {
+                  case 'guest_post': catColor = 'primary'; break;
+                  case 'resource': catColor = 'success'; break;
+                  case 'link_submission': catColor = 'info'; break;
+                  case 'listicle': catColor = 'warning text-dark'; break;
+                }
+                return `
+                <tr>
+                  <td><span class="badge bg-${catColor}">${mod.category.replace('_', ' ').toUpperCase()}</span></td>
+                  <td><code>${mod.modifier}</code></td>
+                  <td>${new Date(mod.created_at).toLocaleDateString()}</td>
+                  <td>
+                    <form method="POST" action="/settings/modifiers/${mod.id}/delete"
+                      onsubmit="return confirm('Delete this modifier?');"
+                      style="display: inline;">
+                      <button class="btn btn-sm btn-outline-danger">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  </td>
+                </tr>`;}).join('')}
+
+${modifiers.length === 0 ? `
+                <tr>
+                  <td colspan="4" class="text-center text-muted py-4">No modifiers found.</td>
+                </tr>` : ''}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+%>
+<%- include('../layout', { title: 'Search Modifiers - Settings', activePage: 'settings', content: content, user: user }) %>

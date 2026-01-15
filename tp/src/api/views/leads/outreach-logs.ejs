@@ -1,0 +1,93 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <h1><i class="bi bi-send"></i> Outreach Logs</h1>
+      <p class="text-muted">Track sent outreach emails and responses</p>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <form method="GET" action="/outreach-logs" class="row g-3">
+            <div class="col-md-5">
+              <select name="campaign" class="form-select">
+                <option value="">All Campaigns</option>
+${campaigns.map(c => `
+                <option value="${c.id}" ${filters.campaign == c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="col-md-5">
+              <select name="status" class="form-select">
+                <option value="">All Statuses</option>
+${statuses.map(s => `
+                <option value="${s}" ${filters.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+              </select>
+            </div>
+            <div class="col-md-2">
+              <button type="submit" class="btn btn-primary w-100">Filter</button>
+            </div>
+          </form>
+          <a href="/outreach-logs" class="btn btn-secondary mt-2">Clear</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logs Table -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th>Company</th>
+                  <th>Email</th>
+                  <th>Campaign</th>
+                  <th>Asset</th>
+                  <th>Status</th>
+                  <th>Sent At</th>
+                </tr>
+              </thead>
+              <tbody>
+${logs.map(log => {
+                let statusColor = 'secondary';
+                switch(log.status) {
+                  case 'SENT': statusColor = 'primary'; break;
+                  case 'OPENED': statusColor = 'info'; break;
+                  case 'REPLIED': statusColor = 'success'; break;
+                  case 'REJECTED': statusColor = 'danger'; break;
+                }
+                return `
+                <tr>
+                  <td>${log.domain || '-'}</td>
+                  <td>${log.company_name || '-'}</td>
+                  <td>${log.email ? `<a href="mailto:${log.email}">${log.email}</a>` : '-'}</td>
+                  <td>${log.campaign_name || '-'}</td>
+                  <td>${log.asset_title || '-'}</td>
+                  <td><span class="badge bg-${statusColor}">${log.status}</span></td>
+                  <td>${new Date(log.sent_at).toLocaleString()}</td>
+                </tr>`;}).join('')}
+
+${logs.length === 0 ? `
+                <tr>
+                  <td colspan="7" class="text-center text-muted py-4">No outreach logs found.</td>
+                </tr>` : ''}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+%>
+<%- include('../layout', { title: 'Outreach Logs - Outreach Admin', activePage: 'leads', content: content, user: user }) %>

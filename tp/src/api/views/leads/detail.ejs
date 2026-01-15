@@ -1,0 +1,140 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/leads">Leads</a></li>
+          <li class="breadcrumb-item active">#${lead.id}</li>
+        </ol>
+      </nav>
+      <h1><i class="bi bi-diagram-3"></i> Blog Lead #${lead.id}</h1>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-6">
+      <div class="card mb-3">
+        <div class="card-header">
+          <i class="bi bi-info-circle"></i> Lead Information
+        </div>
+        <div class="card-body">
+          <table class="table table-sm">
+            <tr><th>Status:</th><td><span class="badge bg-${lead.status === 'NEW' ? 'primary' : lead.status === 'READY' ? 'success' : 'secondary'}">${lead.status}</span></td></tr>
+            <tr><th>Campaign:</th><td><a href="/leads?campaign=${lead.campaign_id}">${lead.campaign_name}</a></td></tr>
+            <tr><th>Brand:</th><td>${lead.brand_name}</td></tr>
+            <tr><th>Source:</th><td>${lead.source_type || '-'}</td></tr>
+            <tr><th>Found At:</th><td>${new Date(lead.found_at).toLocaleString()}</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-journal-richtext"></i> Blog Prospect
+        </div>
+        <div class="card-body">
+          <table class="table table-sm">
+            <tr><th>Domain:</th><td><a href="https://${lead.domain}" target="_blank">${lead.domain}</a></td></tr>
+            <tr><th>Blog Name:</th><td>${lead.blog_name || '-'}</td></tr>
+            <tr><th>Website:</th><td>${lead.blog_website_url ? `<a href="${lead.blog_website_url}" target="_blank">View</a>` : '-'}</td></tr>
+          </table>
+          <a href="/blog-prospects/${lead.blog_prospect_id}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-box-arrow-up-right"></i> View Blog Prospect
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <i class="bi bi-envelope"></i> Emails (${emails.length})
+          </div>
+        </div>
+        <div class="card-body">
+${emails.length > 0 ? `
+          <div class="list-group">
+${emails.map(email => `
+            <div class="list-group-item">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <a href="/blog-emails/${email.id}">${email.email}</a>
+                  <div class="small text-muted">
+                    ${email.is_domain_match ? `<span class="badge bg-success">Match</span>` : ''}
+                    ${email.is_generic ? `<span class="badge bg-warning text-dark">Generic</span>` : ''}
+                  </div>
+                </div>
+              </div>
+            </div>`).join('')}
+          </div>` : `
+          <p class="text-muted mb-0">No emails found for this blog prospect.</p>`}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-file-earmark"></i> Campaign Assets (${assets.length})
+        </div>
+        <div class="card-body">
+${assets.length > 0 ? `
+          <div class="list-group">
+${assets.map(asset => `
+            <div class="list-group-item">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <strong>${asset.title || 'Untitled'}</strong>
+                  <div class="small text-muted">
+                    <a href="${asset.url}" target="_blank">${asset.url}</a>
+                  </div>
+                </div>
+                <span class="badge bg-${asset.type === 'blog' ? 'primary' : 'secondary'}">${asset.type}</span>
+              </div>
+            </div>`).join('')}
+          </div>` : `
+          <p class="text-muted mb-0">No assets found for this campaign.</p>`}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-clock-history"></i> Outreach History (${outreachLogs.length})
+        </div>
+        <div class="card-body">
+${outreachLogs.length > 0 ? `
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Sent At</th>
+                  <th>Asset</th>
+                  <th>Email</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+${outreachLogs.map(log => `
+                <tr>
+                  <td>${new Date(log.sent_at).toLocaleString()}</td>
+                  <td><a href="${log.asset_url}" target="_blank">${log.asset_title || 'Untitled'}</a></td>
+                  <td>${log.email || '-'}</td>
+                  <td><span class="badge bg-${log.status === 'SENT' ? 'primary' : log.status === 'REPLIED' ? 'success' : 'secondary'}">${log.status}</span></td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>` : `
+          <p class="text-muted mb-0">No outreach history for this lead.</p>`}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+%>
+<%- include('../layout', { title: 'Blog Lead #' + lead.id, activePage: 'leads', content: content, user: user }) %>
