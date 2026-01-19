@@ -10,7 +10,9 @@
       "Bash(timeout:*)",
       "Bash(curl:*)",
       "mcp__playwright__browser_navigate",
-      "mcp__playwright__browser_run_code"
+      "mcp__playwright__browser_run_code",
+      "Bash(ls:*)",
+      "Bash(del:*)"
     ]
   }
 }

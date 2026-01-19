@@ -23,7 +23,12 @@ export class OutreachOrchestrator {
    * @param {number} campaignId - Campaign ID (optional, will use first campaign if not provided)
    * @param {boolean} autoExtractEmails - Auto-extract emails after discovery (default: true)
    */
-  static async runCitySearch(city, brandId = null, campaignId = null, autoExtractEmails = true) {
+  static async runCitySearch(
+    city,
+    brandId = null,
+    campaignId = null,
+    autoExtractEmails = true
+  ) {
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`      MODE A: ORGANIC CITY SEARCH - ${city}      `);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
@@ -53,6 +58,12 @@ export class OutreachOrchestrator {
       "IT services company",
       "web development company",
       "mobile app development company",
+      "software app development",
+      "enterprise software development",
+      "web app development",
+      "IT consulting company",
+      "technology development company",
+      "software development firms",
     ];
 
     let addedToday = 0;
@@ -171,20 +182,34 @@ export class OutreachOrchestrator {
       let city = null;
       let country = null;
       try {
-        const urlParts = dirUrl.toLowerCase().split('/');
+        const urlParts = dirUrl.toLowerCase().split("/");
         // Clutch: https://clutch.co/in/developers/bangalore
         // GoodFirms: https://www.goodfirms.co/directory/city/top-software-development-companies/bangalore
-        const cityIndex = urlParts.findIndex(p =>
-          p === 'developers' || p === 'agencies' || p.includes('software-development-companies')
+        const cityIndex = urlParts.findIndex(
+          (p) =>
+            p === "developers" ||
+            p === "agencies" ||
+            p.includes("software-development-companies")
         );
         if (cityIndex !== -1 && urlParts[cityIndex + 1]) {
-          city = urlParts[cityIndex + 1].replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          city = urlParts[cityIndex + 1]
+            .replace(/-/g, " ")
+            .replace(/\b\w/g, (l) => l.toUpperCase());
         }
 
         // Extract country from URL path
-        const countryCode = urlParts.find(p => p === 'in' || p === 'us' || p === 'uk' || p === 'ca' || p === 'au');
+        const countryCode = urlParts.find(
+          (p) =>
+            p === "in" || p === "us" || p === "uk" || p === "ca" || p === "au"
+        );
         if (countryCode) {
-          const countryMap = { 'in': 'India', 'us': 'United States', 'uk': 'United Kingdom', 'ca': 'Canada', 'au': 'Australia' };
+          const countryMap = {
+            in: "India",
+            us: "United States",
+            uk: "United Kingdom",
+            ca: "Canada",
+            au: "Australia",
+          };
           country = countryMap[countryCode];
         }
       } catch (e) {
@@ -366,8 +391,7 @@ export class OutreachOrchestrator {
 
                 if (!blogProspect) {
                   // Extract blog name from title or use domain
-                  const blogName =
-                    result.title || resultDomain.split(".")[0];
+                  const blogName = result.title || resultDomain.split(".")[0];
                   const baseUrl = `${resultUrl.protocol}//${resultUrl.hostname}`;
 
                   // Create blog prospect in the new blog_prospects table
@@ -618,10 +642,16 @@ export class OutreachOrchestrator {
       }
 
       // Step 2: Check exclusions table (already contacted)
-      const { ExclusionRepo } = await import('../repositories/ExclusionRepo.js');
+      const { ExclusionRepo } = await import(
+        "../repositories/ExclusionRepo.js"
+      );
       if (ExclusionRepo.isExcluded(domain)) {
         const reason = ExclusionRepo.getExclusionReason(domain);
-        console.log(`  ⊗ SKIP: ${domain} (excluded - ${reason?.reason || 'already reached out'})`);
+        console.log(
+          `  ⊗ SKIP: ${domain} (excluded - ${
+            reason?.reason || "already reached out"
+          })`
+        );
         return;
       }
 
@@ -809,16 +839,18 @@ export class OutreachOrchestrator {
       return;
     }
 
-    console.log(`  Found ${blogProspects.length} unprocessed blog prospects.\n`);
+    console.log(
+      `  Found ${blogProspects.length} unprocessed blog prospects.\n`
+    );
 
     let processed = 0;
     let emailsFound = 0;
 
     for (const blogProspect of blogProspects) {
       console.log(
-        `\n[${processed + 1}/${blogProspects.length}] ${blogProspect.domain} - ${
-          blogProspect.blog_name || "Unknown"
-        }`
+        `\n[${processed + 1}/${blogProspects.length}] ${
+          blogProspect.domain
+        } - ${blogProspect.blog_name || "Unknown"}`
       );
 
       // Extract emails from website
@@ -892,10 +924,9 @@ export class OutreachOrchestrator {
       const bestEmail = BlogEmailRepo.getBestEmail(blogProspect.id);
       if (bestEmail) {
         // Has email → Ready for outreach
-        db.prepare("UPDATE blog_leads SET status = ? WHERE blog_prospect_id = ?").run(
-          "READY",
-          blogProspect.id
-        );
+        db.prepare(
+          "UPDATE blog_leads SET status = ? WHERE blog_prospect_id = ?"
+        ).run("READY", blogProspect.id);
         console.log(`  ✓ Blog lead status: READY (has email)`);
       } else {
         console.log(`  ℹ Blog lead status: NEW (no email found)`);
@@ -910,7 +941,9 @@ export class OutreachOrchestrator {
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`         BLOG EMAIL EXTRACTION COMPLETE            `);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`  Blog Prospects Processed: ${processed}/${blogProspects.length}`);
+    console.log(
+      `  Blog Prospects Processed: ${processed}/${blogProspects.length}`
+    );
     console.log(`  Total Emails Found:  ${emailsFound}`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
 

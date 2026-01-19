@@ -250,22 +250,23 @@ function initSchema() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS email_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      lead_id INTEGER NOT NULL,
-      email_id INTEGER NOT NULL,
-      template_id INTEGER NOT NULL,
+      lead_id INTEGER REFERENCES leads(id),
+      blog_lead_id INTEGER REFERENCES blog_leads(id),
+      email_id INTEGER REFERENCES emails(id),
+      blog_email_id INTEGER REFERENCES blog_emails(id),
+      template_id INTEGER REFERENCES email_templates(id),
       to_email TEXT NOT NULL,
       subject TEXT NOT NULL,
       body TEXT NOT NULL,
-      status TEXT CHECK(status IN ('pending', 'sending', 'sent', 'failed')) DEFAULT 'pending',
+      status TEXT DEFAULT 'pending',
       scheduled_for DATETIME DEFAULT CURRENT_TIMESTAMP,
       sent_at DATETIME,
       error_message TEXT,
       attempts INTEGER DEFAULT 0,
       message_id TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (lead_id) REFERENCES leads(id),
-      FOREIGN KEY (email_id) REFERENCES emails(id),
-      FOREIGN KEY (template_id) REFERENCES email_templates(id)
+      CHECK (lead_id IS NOT NULL OR blog_lead_id IS NOT NULL),
+      CHECK (email_id IS NOT NULL OR blog_email_id IS NOT NULL)
     );
   `);
 
@@ -421,14 +422,7 @@ function initSchema() {
 function populateInitialData() {
   console.log("Populating initial data...");
 
-  // Check if data already exists
-  const countryCount = db
-    .prepare("SELECT COUNT(*) as count FROM countries")
-    .get().count;
-  if (countryCount > 0) {
-    console.log("  Initial data already exists, skipping...");
-    return;
-  }
+  console.log("  Checking and updating initial data...");
 
   // 1. Insert Countries
   const countries = [
@@ -441,13 +435,19 @@ function populateInitialData() {
     "France",
   ];
 
-  const insertCountry = db.prepare("INSERT INTO countries (name) VALUES (?)");
+  const insertCountry = db.prepare(
+    "INSERT OR IGNORE INTO countries (name) VALUES (?)"
+  );
   const countryIds = {};
   for (const country of countries) {
-    const info = insertCountry.run(country);
-    countryIds[country] = info.lastInsertRowid;
+    insertCountry.run(country);
+    // Fetch ID to ensure we have it even if it existed
+    const row = db
+      .prepare("SELECT id FROM countries WHERE name = ?")
+      .get(country);
+    if (row) countryIds[country] = row.id;
   }
-  console.log(`  ✓ Inserted ${countries.length} countries`);
+  console.log(`  ✓ Processed ${countries.length} countries`);
 
   // 2. Insert Cities
   const citiesByCountry = {
@@ -461,6 +461,10 @@ function populateInitialData() {
       "Kolkata",
       "Ahmedabad",
       "Chandigarh",
+      "Surat",
+      "Vadodara",
+      "Rajkot",
+      "Gandhinagar",
     ],
     "United States": [
       "San Francisco Bay Area",
@@ -487,18 +491,25 @@ function populateInitialData() {
   };
 
   const insertCity = db.prepare(
-    "INSERT INTO cities (country_id, name) VALUES (?, ?)"
+    "INSERT OR IGNORE INTO cities (country_id, name) VALUES (?, ?)"
   );
   const cityIds = {};
   for (const [country, cities] of Object.entries(citiesByCountry)) {
     const countryId = countryIds[country];
-    for (const city of cities) {
-      const info = insertCity.run(countryId, city);
-      const key = `${city}_${country}`;
-      cityIds[key] = info.lastInsertRowid;
+    if (countryId) {
+      for (const city of cities) {
+        insertCity.run(countryId, city);
+        const row = db
+          .prepare("SELECT id FROM cities WHERE country_id = ? AND name = ?")
+          .get(countryId, city);
+        if (row) {
+          const key = `${city}_${country}`;
+          cityIds[key] = row.id;
+        }
+      }
     }
   }
-  console.log(`  ✓ Inserted ${Object.keys(cityIds).length} cities`);
+  console.log(`  ✓ Processed cities`);
 
   // 3. Insert Outreach Keywords
   const keywords = [
@@ -515,14 +526,17 @@ function populateInitialData() {
   ];
 
   const insertKeyword = db.prepare(
-    "INSERT INTO outreach_keywords (phrase) VALUES (?)"
+    "INSERT OR IGNORE INTO outreach_keywords (phrase) VALUES (?)"
   );
   const keywordIds = {};
   for (const keyword of keywords) {
-    const info = insertKeyword.run(keyword);
-    keywordIds[keyword] = info.lastInsertRowid;
+    insertKeyword.run(keyword);
+    const row = db
+      .prepare("SELECT id FROM outreach_keywords WHERE phrase = ?")
+      .get(keyword);
+    if (row) keywordIds[keyword] = row.id;
   }
-  console.log(`  ✓ Inserted ${keywords.length} keywords`);
+  console.log(`  ✓ Processed keywords`);
 
   // 4. Insert Search Modifiers (NEW SECTION)
   const modifiers = [
@@ -540,22 +554,22 @@ function populateInitialData() {
     },
     {
       category: "listicle",
-      text: '("top" OR "best" OR "tools" OR "companies" OR "agencies") + 2025',
+      text: '("top" OR "best" OR "tools" OR "companies" OR "agencies") + 2026', // Updated year
     },
   ];
 
   const insertModifier = db.prepare(
-    "INSERT INTO search_modifiers (category, modifier) VALUES (?, ?)"
+    "INSERT OR IGNORE INTO search_modifiers (category, modifier) VALUES (?, ?)"
   );
 
   for (const mod of modifiers) {
     insertModifier.run(mod.category, mod.text);
   }
-  console.log(`  ✓ Inserted ${modifiers.length} search modifiers`);
+  console.log(`  ✓ Processed search modifiers`);
 
   // 5. Generate Search Queries (Keyword + City)
   const insertQuery = db.prepare(
-    "INSERT INTO search_queries (keyword_id, city_id, query) VALUES (?, ?, ?)"
+    "INSERT OR IGNORE INTO search_queries (keyword_id, city_id, query) VALUES (?, ?, ?)"
   );
   const insertMany = db.transaction((qs) => {
     for (const q of qs) {
@@ -573,14 +587,30 @@ function populateInitialData() {
   }
 
   insertMany(queries);
-  console.log(`  ✓ Generated ${queries.length} search queries`);
+  console.log(`  ✓ Generated search queries`);
 
-  // 6. Insert default system settings
+  // 6. Insert System Settings
   const defaultSettings = [
-    { key: 'daily_prospect_limit', value: '10', description: 'Maximum number of prospects to add per day' },
-    { key: 'daily_blog_limit', value: '10', description: 'Maximum number of blog assets to find per day' },
-    { key: 'daily_email_limit', value: '50', description: 'Maximum number of emails to extract per day' },
-    { key: 'daily_outreach_limit', value: '20', description: 'Maximum number of outreach emails to send per day' }
+    {
+      key: "daily_prospect_limit",
+      value: "10",
+      description: "Maximum number of prospects to add per day",
+    },
+    {
+      key: "daily_blog_limit",
+      value: "10",
+      description: "Maximum number of blog assets to find per day",
+    },
+    {
+      key: "daily_email_limit",
+      value: "50",
+      description: "Maximum number of emails to extract per day",
+    },
+    {
+      key: "daily_outreach_limit",
+      value: "20",
+      description: "Maximum number of outreach emails to send per day",
+    },
   ];
 
   const insertSetting = db.prepare(
@@ -590,7 +620,64 @@ function populateInitialData() {
   for (const setting of defaultSettings) {
     insertSetting.run(setting.key, setting.value, setting.description);
   }
-  console.log(`  ✓ Inserted ${defaultSettings.length} system settings`);
+  console.log(`  ✓ Processed system settings`);
+
+  // 7. Insert Default Brand and Campaign (Fix missing initial data)
+  const defaultBrand = { name: "My Agency", website: "https://example.com" };
+  db.prepare("INSERT OR IGNORE INTO brands (name, website) VALUES (?, ?)").run(
+    defaultBrand.name,
+    defaultBrand.website
+  );
+
+  const brandRow = db
+    .prepare("SELECT id FROM brands WHERE name = ?")
+    .get(defaultBrand.name);
+  if (brandRow) {
+    const defaultCampaign = { name: "General Outreach", brand_id: brandRow.id };
+    const campaignInfo = db
+      .prepare("INSERT OR IGNORE INTO campaigns (name, brand_id) VALUES (?, ?)")
+      .run(defaultCampaign.name, defaultCampaign.brand_id);
+
+    // If newly created or exists, get ID
+    const campaignRow = db
+      .prepare("SELECT id FROM campaigns WHERE name = ? AND brand_id = ?")
+      .get(defaultCampaign.name, defaultCampaign.brand_id);
+    if (campaignRow)
+      console.log(
+        `  ✓ Default Campaign 'General Outreach' ready (ID: ${campaignRow.id})`
+      );
+  }
+
+  // 8. Insert Default Email Templates
+  const templates = [
+    {
+      name: "General Connection",
+      subject: "Partnership Inquiry - {{company}}",
+      body: "Hi Team,\n\nI was browsing your website {{domain}} and found it very interesting.\n\nWe are looking for potential partners in this space. Would you be open to a quick chat?\n\nBest,\n[Your Name]",
+    },
+    {
+      name: "Link Exchange",
+      subject: "Collaboration Opportunity",
+      body: "Hello,\n\nI run a blog in a similar niche and think our audiences would benefit from a collaboration.\n\nAre you open to guest posts or link exchanges?\n\nCheers,\n[Your Name]",
+    },
+  ];
+
+  const insertTemplate = db.prepare(
+    "INSERT OR IGNORE INTO email_templates (name, subject, body, variables, is_active) VALUES (?, ?, ?, '{{company}},{{domain}}', 1)"
+  ); // Note: simplified check, assuming name unique constraint not there? Checked schema, name is not unique but we can query first.
+
+  // Checking schema, name is NOT unique in email_templates definition above. So we check manually.
+  const checkTemplate = db.prepare(
+    "SELECT id FROM email_templates WHERE name = ?"
+  );
+  let tCount = 0;
+  for (const t of templates) {
+    if (!checkTemplate.get(t.name)) {
+      insertTemplate.run(t.name, t.subject, t.body);
+      tCount++;
+    }
+  }
+  console.log(`  ✓ Added ${tCount} default email templates`);
 
   console.log("Initial data population complete ✅");
 }

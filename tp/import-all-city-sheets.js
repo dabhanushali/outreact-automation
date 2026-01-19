@@ -3,34 +3,36 @@
  * Fetches directly using Google Sheets API
  */
 
-import { db } from './src/database/db.js';
-import { ExclusionRepo } from './src/repositories/ExclusionRepo.js';
+import { db } from "./src/database/db.js";
+import { ExclusionRepo } from "./src/repositories/ExclusionRepo.js";
 
-const SHEET_ID = '14vCrMbqoR1eBe4x1BcjQZjQnggn_2_2kAylv7HayP-k';
+const SHEET_ID = "14vCrMbqoR1eBe4x1BcjQZjQnggn_2_2kAylv7HayP-k";
 
 // Sheets to import (excluding Final, Cliq Outreach Mails, Sheet19 as per user request)
 const SHEETS_TO_IMPORT = [
-  'Bangalore',
-  'Hyderabad',
-  'Mumbai',
-  'Pune',
-  'Chennai',
-  'Ahmedabad',
-  'Vadodra',
-  'Rajkot',
-  'Gandhinagar',
-  'Surat',
-  'Outreach Mail',
-  'Sheet17',
-  'Backlink Got'
+  "Bangalore",
+  "Hyderabad",
+  "Mumbai",
+  "Pune",
+  "Chennai",
+  "Ahmedabad",
+  "Vadodra",
+  "Rajkot",
+  "Gandhinagar",
+  "Surat",
+  "Outreach Mail",
+  "Sheet17",
+  "Backlink Got",
 ];
 
-console.log('\n╔════════════════════════════════════════════════════════════╗');
-console.log('║   Importing ALL City Sheets from Google Spreadsheet       ║');
-console.log('╚════════════════════════════════════════════════════════════╝\n');
+console.log("\n╔════════════════════════════════════════════════════════════╗");
+console.log("║   Importing ALL City Sheets from Google Spreadsheet       ║");
+console.log("╚════════════════════════════════════════════════════════════╝\n");
 
 async function fetchSheetData(sheetName) {
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
+    sheetName
+  )}`;
 
   try {
     const response = await fetch(url);
@@ -45,48 +47,49 @@ async function fetchSheetData(sheetName) {
   }
 }
 
-function parseCSV(csv) {
-  const lines = csv.split('\n').slice(1); // Skip header
-  const exclusions = {
-    domains: new Set(),
-    emails: new Set()
-  };
+// Robust CSV Parser that handles quoted newlines
+function parseBasicCSV(text) {
+  const rows = [];
+  let currentRow = [];
+  let currentVal = "";
+  let inQuote = false;
 
-  for (const line of lines) {
-    if (!line.trim()) continue;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
 
-    // Parse CSV line (handle quoted strings)
-    const matches = line.match(/("([^"]*)"|[^,]+)/g);
-    if (!matches || matches.length < 2) continue;
-
-    const company = matches[0]?.replace(/"/g, '').trim() || '';
-    const email = matches[1]?.replace(/"/g, '').trim() || '';
-
-    if (!email || !email.includes('@')) continue;
-
-    // Extract domain from email
-    const domain = email.split('@')[1].toLowerCase().trim();
-    if (domain && domain.includes('.')) {
-      exclusions.domains.add(domain);
-      exclusions.emails.add(email.toLowerCase().trim());
-    }
-
-    // Also extract domain from company name if it contains a website
-    if (company) {
-      const urlMatch = company.match(/https?:\/\/([^\/\s]+)/);
-      if (urlMatch) {
-        const domainFromUrl = urlMatch[1].replace(/^www\./, '');
-        if (domainFromUrl && domainFromUrl.includes('.')) {
-          exclusions.domains.add(domainFromUrl);
+    if (inQuote) {
+      if (char === '"') {
+        if (i + 1 < text.length && text[i + 1] === '"') {
+          currentVal += '"';
+          i++;
+        } else {
+          inQuote = false;
         }
+      } else {
+        currentVal += char;
+      }
+    } else {
+      if (char === '"') {
+        inQuote = true;
+      } else if (char === ",") {
+        currentRow.push(currentVal.trim());
+        currentVal = "";
+      } else if (char === "\n" || char === "\r") {
+        currentRow.push(currentVal.trim());
+        if (currentRow.some((c) => c)) rows.push(currentRow);
+        currentRow = [];
+        currentVal = "";
+        if (char === "\r" && text[i + 1] === "\n") i++;
+      } else {
+        currentVal += char;
       }
     }
   }
-
-  return {
-    domains: Array.from(exclusions.domains),
-    emails: Array.from(exclusions.emails)
-  };
+  if (currentVal || currentRow.length > 0) {
+    currentRow.push(currentVal.trim());
+    rows.push(currentRow);
+  }
+  return rows;
 }
 
 async function importSheet(sheetName) {
@@ -98,41 +101,94 @@ async function importSheet(sheetName) {
     return { added: 0, skipped: 0 };
   }
 
-  const { domains, emails } = parseCSV(csv);
-  console.log(`  Found ${domains.length} domains and ${emails.length} emails`);
+  const rows = parseBasicCSV(csv);
+  if (rows.length === 0) {
+    console.log(`  ⚠ Sheet is empty`);
+    return { added: 0, skipped: 0 };
+  }
+
+  // Detect columns
+  const header = rows[0].map((h) => h.toLowerCase().trim());
+  const emailIdx = header.findIndex((h) => h.includes("email"));
+  const websiteIdx = header.findIndex(
+    (h) => h.includes("website") || h.includes("domain")
+  );
+
+  if (emailIdx === -1 && websiteIdx === -1) {
+    console.log(
+      `  ⚠ Could not find 'Email' or 'Website' columns in header: [${header.join(
+        ", "
+      )}]`
+    );
+    return { added: 0, skipped: 0 };
+  }
+
+  console.log(`  ✓ Found columns - Email: ${emailIdx}, Website: ${websiteIdx}`);
 
   let added = 0;
   let skipped = 0;
 
-  // Add domains
-  for (const domain of domains) {
-    try {
-      if (!ExclusionRepo.isExcluded(domain)) {
-        ExclusionRepo.excludeDomain(domain, `Already reached out (Google Sheet - ${sheetName})`);
-        added++;
-      } else {
+  // Process rows (skip header)
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const email = emailIdx !== -1 ? row[emailIdx] : null;
+    const website = websiteIdx !== -1 ? row[websiteIdx] : null;
+
+    // Process Email
+    if (email && email.includes("@")) {
+      try {
+        if (!ExclusionRepo.isEmailExcluded(email)) {
+          ExclusionRepo.excludeEmail(
+            email.toLowerCase().trim(),
+            `Sheet: ${sheetName}`
+          );
+          added++;
+        } else {
+          skipped++;
+        }
+      } catch (e) {
         skipped++;
       }
-    } catch (error) {
-      skipped++;
+
+      // Also exclude domain from email
+      try {
+        const domain = email.split("@")[1];
+        if (
+          domain &&
+          domain.includes(".") &&
+          !ExclusionRepo.isExcluded(domain)
+        ) {
+          ExclusionRepo.excludeDomain(
+            domain.toLowerCase().trim(),
+            `Sheet: ${sheetName} (via Email)`
+          );
+          added++;
+        }
+      } catch (e) {}
+    }
+
+    // Process Website
+    if (website && website.includes(".")) {
+      try {
+        let domain = website
+          .replace(/^(https?:\/\/)?(www\.)?/, "")
+          .replace(/\/$/, "")
+          .split("/")[0]
+          .toLowerCase()
+          .trim();
+        if (domain && !ExclusionRepo.isExcluded(domain)) {
+          ExclusionRepo.excludeDomain(domain, `Sheet: ${sheetName}`);
+          added++;
+        } else {
+          skipped++;
+        }
+      } catch (e) {
+        skipped++;
+      }
     }
   }
 
-  // Add emails
-  for (const email of emails) {
-    try {
-      if (!ExclusionRepo.isEmailExcluded(email)) {
-        ExclusionRepo.excludeEmail(email, `Already reached out (Google Sheet - ${sheetName})`);
-        added++;
-      } else {
-        skipped++;
-      }
-    } catch (error) {
-      skipped++;
-    }
-  }
-
-  console.log(`  ✓ Added: ${added}, Skipped: ${skipped}`);
+  console.log(`  ✓ Added: ${added}, Skipped/Existing: ${skipped}`);
   return { added, skipped };
 }
 
@@ -146,24 +202,28 @@ async function main() {
     totalSkipped += result.skipped;
   }
 
-  console.log(`\n${'='.repeat(60)}`);
+  console.log(`\n${"=".repeat(60)}`);
   console.log(`IMPORT SUMMARY`);
-  console.log(`${'='.repeat(60)}`);
+  console.log(`${"=".repeat(60)}`);
   console.log(`Total added:    ${totalAdded}`);
   console.log(`Total skipped:  ${totalSkipped}`);
   console.log(`Total processed: ${totalAdded + totalSkipped}`);
-  console.log(`${'='.repeat(60)}\n`);
+  console.log(`${"=".repeat(60)}\n`);
 
   // Show current exclusion stats
-  const domainCount = db.prepare("SELECT COUNT(*) as count FROM exclusions WHERE type = 'domain'").get().count;
-  const emailCount = db.prepare("SELECT COUNT(*) as count FROM exclusions WHERE type = 'email'").get().count;
+  const domainCount = db
+    .prepare("SELECT COUNT(*) as count FROM exclusions WHERE type = 'domain'")
+    .get().count;
+  const emailCount = db
+    .prepare("SELECT COUNT(*) as count FROM exclusions WHERE type = 'email'")
+    .get().count;
 
   console.log(`Total exclusions in database:`);
   console.log(`  Domains: ${domainCount}`);
   console.log(`  Emails:  ${emailCount}\n`);
 
-  console.log('✅ All city sheets imported successfully!');
-  console.log('   These companies will now be skipped during prospecting.\n');
+  console.log("✅ All city sheets imported successfully!");
+  console.log("   These companies will now be skipped during prospecting.\n");
 }
 
 main().catch(console.error);

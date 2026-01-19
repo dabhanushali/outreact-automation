@@ -33,7 +33,7 @@ class EmailTemplateRepo {
       data.subject,
       data.body,
       data.variables ? JSON.stringify(data.variables) : null,
-      data.is_active !== undefined ? data.is_active : 1
+      data.is_active !== undefined ? (data.is_active ? 1 : 0) : 1
     );
   }
 
@@ -62,7 +62,7 @@ class EmailTemplateRepo {
     }
     if (data.is_active !== undefined) {
       fields.push('is_active = ?');
-      values.push(data.is_active);
+      values.push(data.is_active ? 1 : 0);
     }
 
     if (fields.length === 0) return;

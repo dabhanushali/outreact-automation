@@ -26,21 +26,46 @@ export class InputParser {
     };
 
     // Check first line manually
-    if (
-      lines.length > 0 &&
-      lines[0].toUpperCase() === lines[0] &&
-      lines[0].length > 2 &&
-      !lines[0].includes("http")
-    ) {
-      console.log(`Found Brand (Header): ${lines[0]}`);
-      currentBrandId = BrandRepo.findOrCreate(lines[0]);
+    if (lines.length > 0) {
+      const firstLine = lines[0].replace(/^#+\s*/, "").trim(); // Remove markdown # prefix
+      if (
+        firstLine.toUpperCase() === firstLine &&
+        firstLine.length > 2 &&
+        !firstLine.includes("http")
+      ) {
+        console.log(`Found Brand (Header): ${firstLine}`);
+        currentBrandId = BrandRepo.findOrCreate(firstLine);
+      }
     }
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (!line) continue;
 
-      // Check for Separator
+      // Check for brand header (with or without ## prefix)
+      const cleanedLine = line.replace(/^#+\s*/, "").trim();
+      if (
+        cleanedLine.length > 0 &&
+        cleanedLine.toUpperCase() === cleanedLine &&
+        cleanedLine.length > 2 &&
+        cleanedLine.length < 30 && // Reasonable brand name length
+        !cleanedLine.includes("http") &&
+        !cleanedLine.includes("Where") &&
+        cleanedLine !== "KEYWORDS" &&
+        !cleanedLine.includes("rotates through") &&
+        !cleanedLine.match(/^[-]+$/) // Not just dashes
+      ) {
+        // This is a brand header
+        savePendingKeywords();
+        console.log(`Found Brand: ${cleanedLine}`);
+        currentBrandId = BrandRepo.findOrCreate(cleanedLine);
+        currentCampaignId = null;
+        capturingKeywords = false;
+        currentKeywords = [];
+        continue;
+      }
+
+      // Check for Separator followed by Brand (format: ------------\nBRAND\n------------)
       if (line.match(/^[-]{3,}$/)) {
         // End of block -> Save pending work
         savePendingKeywords();
@@ -49,25 +74,39 @@ export class InputParser {
         capturingKeywords = false;
         currentCampaignId = null;
 
-        // Check next valid line for Brand
+        // Check next valid line for Brand (pattern: dashes, brand, dashes)
+        if (i + 2 < lines.length) {
+          const next = lines[i + 1];
+          const afterNext = lines[i + 2];
+          if (
+            next &&
+            !next.match(/^[-]{3,}$/) &&
+            !next.includes("http") &&
+            next.length > 1 &&
+            next.length < 50 &&
+            afterNext &&
+            afterNext.match(/^[-]{3,}$/)
+          ) {
+            console.log(`Found Brand (Block format): ${next}`);
+            currentBrandId = BrandRepo.findOrCreate(next);
+            i += 2; // Skip the brand name and the closing dashes
+            continue;
+          }
+        }
+
+        // Check for format: dashes, brand (no closing dashes, then empty or URL)
         if (i + 1 < lines.length) {
           const next = lines[i + 1];
           if (
             next &&
             !next.match(/^[-]{3,}$/) &&
             !next.includes("http") &&
+            next.length > 1 &&
             next.length < 50
           ) {
-            if (i + 2 < lines.length && lines[i + 2].match(/^[-]{3,}$/)) {
-              console.log(`Found Brand (Block): ${next}`);
-              currentBrandId = BrandRepo.findOrCreate(next);
-              i += 2;
-              continue;
-            } else if (
-              i + 2 < lines.length &&
-              (lines[i + 2] === "" || lines[i + 2].startsWith("http"))
-            ) {
-              console.log(`Found Brand (Section): ${next}`);
+            const afterNext = i + 2 < lines.length ? lines[i + 2] : null;
+            if (!afterNext || afterNext === "" || afterNext.startsWith("http")) {
+              console.log(`Found Brand (Section format): ${next}`);
               currentBrandId = BrandRepo.findOrCreate(next);
               i += 1;
               continue;

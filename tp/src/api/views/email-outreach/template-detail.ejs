@@ -1,0 +1,195 @@
+<% let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item">
+            <a href="/email-outreach/templates">Templates</a>
+          </li>
+          <li class="breadcrumb-item active" aria-current="page">
+            ${template.name}
+          </li>
+        </ol>
+      </nav>
+      <div class="d-flex justify-content-between align-items-center">
+        <h1><i class="bi bi-pencil-square"></i> Edit Template</h1>
+        <a href="/email-outreach/templates" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left"></i> Back to List
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Edit Form -->
+    <div class="col-lg-8">
+      <div class="card mb-4">
+        <div class="card-body">
+          <form
+            method="POST"
+            action="/email-outreach/templates/${template.id}/update"
+          >
+            <div class="mb-3">
+              <label for="name" class="form-label">Template Name</label>
+              <input
+                type="text"
+                class="form-control"
+                id="name"
+                name="name"
+                required
+                value="${template.name}"
+              />
+            </div>
+
+            <div class="mb-3">
+              <label for="subject" class="form-label">Subject Line</label>
+              <input
+                type="text"
+                class="form-control"
+                id="subject"
+                name="subject"
+                required
+                value="${template.subject}"
+              />
+            </div>
+
+            <div class="mb-3">
+              <label for="body" class="form-label">Email Body (HTML)</label>
+              <textarea
+                class="form-control"
+                id="body"
+                name="body"
+                rows="15"
+                required
+              >
+${template.body}</textarea
+              >
+              <small class="form-text text-muted">
+                You can use HTML tags. Variables will be replaced when sending.
+              </small>
+            </div>
+
+            <div class="mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="is_active"
+                name="is_active" value="1" ${template.is_active ? 'checked' :
+                ''}>
+                <label class="form-check-label" for="is_active">
+                  Active (available for campaigns)
+                </label>
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-end">
+              <button
+                type="button"
+                class="btn btn-outline-danger me-2"
+                onclick="confirmDelete(${template.id})"
+              >
+                Delete Template
+              </button>
+              <button type="submit" class="btn btn-primary">
+                Save Changes
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar / Help -->
+    <div class="col-lg-4">
+      <div class="card mb-4 border-info">
+        <div class="card-header bg-info text-white">
+          <i class="bi bi-info-circle"></i> Available Variables
+        </div>
+        <div class="card-body">
+          <p class="mb-2">Click to copy variable to clipboard:</p>
+          <div class="list-group">
+            ${availableVariables.map(v => `
+            <button
+              type="button"
+              class="list-group-item list-group-item-action"
+              onclick="copyToClipboard('{{${v.name}}}')"
+            >
+              <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1 text-primary">{{${v.name}}}</h6>
+              </div>
+              <small class="text-muted">${v.description}</small>
+            </button>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header"><i class="bi bi-eye"></i> Preview</div>
+        <div class="card-body">
+          <p class="text-muted small">
+            This is how your email might look with sample data.
+          </p>
+          <div class="border rounded p-3 bg-light">
+            <strong>Subject:</strong> <span id="previewSubject"></span>
+            <hr />
+            <div id="previewBody"></div>
+          </div>
+          <button
+            class="btn btn-sm btn-outline-secondary mt-2 w-100"
+            onclick="updatePreview()"
+          >
+            Refresh Preview
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function confirmDelete(id) {
+    if (confirm('Are you sure you want to delete this template?')) {
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = \`/email-outreach/templates/\${id}/delete\`;
+      document.body.appendChild(form);
+      form.submit();
+    }
+  }
+
+  function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+      // Show toast or slight visual feedback?
+      alert('Copied ' + text + ' to clipboard');
+    });
+  }
+
+  function updatePreview() {
+    // Simple client-side replacement for preview if we don't want to hit server
+    let subject = document.getElementById('subject').value;
+    let body = document.getElementById('body').value;
+
+    const sampleData = {
+      name: 'John Doe',
+      company: 'Acme Blog',
+      domain: 'acme-blog.com',
+      email: 'john@acme-blog.com',
+      campaign: 'Guest Post Outreach',
+      brand: 'MyBrand'
+    };
+
+    for (const [key, value] of Object.entries(sampleData)) {
+      const regex = new RegExp('{{' + key + '}}', 'gi');
+      subject = subject.replace(regex, value);
+      body = body.replace(regex, value);
+    }
+
+    document.getElementById('previewSubject').textContent = subject;
+    document.getElementById('previewBody').innerHTML = body;
+  }
+
+  // Initial preview
+  document.addEventListener('DOMContentLoaded', updatePreview);
+</script>
+`; %> <%- include('../layout', { title: 'Edit Template - Outreach Admin',
+activePage: 'email-outreach', content: content, user: user }) %>

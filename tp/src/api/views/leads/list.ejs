@@ -49,6 +49,9 @@ ${sources.map(s => `
   <div class="row mb-3">
     <div class="col-12">
       <div class="btn-group">
+        <button class="btn btn-sm btn-outline-info" onclick="showAddToQueueModal()">
+          <i class="bi bi-envelope-plus"></i> Add to Queue
+        </button>
         <button class="btn btn-sm btn-outline-success" onclick="bulkUpdate('READY')">
           <i class="bi bi-check-circle"></i> Mark Ready
         </button>
@@ -57,6 +60,9 @@ ${sources.map(s => `
         </button>
         <button class="btn btn-sm btn-outline-danger" onclick="bulkUpdate('REJECTED')">
           <i class="bi bi-x-circle"></i> Mark Rejected
+        </button>
+        <button class="btn btn-sm btn-outline-warning" onclick="startSending()">
+          <i class="bi bi-play-fill"></i> Process Queue
         </button>
       </div>
     </div>
@@ -86,7 +92,7 @@ ${sources.map(s => `
                 <tbody>
 ${leads.map(lead => `
                   <tr>
-                    <td><input type="checkbox" name="lead_ids" value="${lead.id}"></td>
+                    <td><input type="checkbox" name="lead_ids" value="${lead.id}" data-email-id="${lead.email_id}"></td>
                     <td><a href="https://${lead.domain}" target="_blank">${lead.domain}</a></td>
                     <td>${lead.blog_name || '-'}</td>
                     <td>${lead.email ? `<a href="mailto:${lead.email}">${lead.email}</a>` : '-'}</td>
@@ -115,6 +121,51 @@ ${leads.length === 0 ? `
   </div>
 </div>
 
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body">
+            <div class="table-responsive">
+              <form id="bulkForm" method="POST" action="/leads/bulk-update">
+                <input type="hidden" name="status" id="bulkStatus">
+                <table class="table table-hover">
+                  <!-- ... table content ... -->
+                </table>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add to Queue Modal -->
+  <div class="modal fade" id="addToQueueModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Add to Email Queue</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="queueForm">
+            <p>Selected Leads: <span id="queueCount">0</span></p>
+            <div class="mb-3">
+              <label class="form-label">Select Email Template</label>
+              <select name="template_id" class="form-select" required>
+                <option value="">Choose a template...</option>
+                ${templates.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+              </select>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" onclick="submitToQueue()">Queue Emails</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 <script>
 function toggleAll(checkbox) {
   document.querySelectorAll('input[name="lead_ids"]').forEach(cb => cb.checked = checkbox.checked);
@@ -130,12 +181,100 @@ function bulkUpdate(status) {
   document.getElementById('bulkForm').submit();
 }
 
+function showAddToQueueModal() {
+  const selected = document.querySelectorAll('input[name="lead_ids"]:checked');
+  if (selected.length === 0) {
+    alert('Please select at least one lead');
+    return;
+  }
+  
+  // count leads with emails
+  const validLeads = Array.from(selected).filter(cb => cb.dataset.emailId);
+  
+  if (validLeads.length === 0) {
+    alert('Selected leads must have an email address to be queued.');
+    return;
+  }
+  
+  document.getElementById('queueCount').textContent = validLeads.length;
+  const modal = new bootstrap.Modal(document.getElementById('addToQueueModal'));
+  modal.show();
+}
+
+function submitToQueue() {
+  const selected = document.querySelectorAll('input[name="lead_ids"]:checked');
+  const leadIds = [];
+  const emailIds = [];
+  
+  selected.forEach(cb => {
+    if (cb.dataset.emailId) {
+      leadIds.push(cb.value);
+      emailIds.push(cb.dataset.emailId);
+    }
+  });
+  
+  const templateId = document.querySelector('#queueForm select[name="template_id"]').value;
+  if (!templateId) {
+    alert('Please select a template');
+    return;
+  }
+  
+  const btn = document.querySelector('#addToQueueModal .btn-primary');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+  
+  fetch('/email-outreach/queue/add', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      lead_ids: leadIds,
+      email_ids: emailIds,
+      template_id: templateId
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      if (data.failed > 0) {
+        // Show detailed error report
+        const errors = data.errors.map(e => 'Lead ' + e.pair.lead_id + ': ' + e.error).join('\\n');
+        alert('Queued: ' + data.queued + '\\nFailed: ' + data.failed + '\\n\\nErrors:\\n' + errors);
+      } else {
+        alert('Successfully added ' + data.queued + ' emails to queue');
+      }
+      location.reload();
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(err => alert('Error: ' + err.message))
+  .finally(() => {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  });
+}
+
 function updateStatus(leadId, status) {
   fetch('/leads/' + leadId + '/status', {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
     body: 'status=' + status
   }).then(() => location.reload());
+}
+
+function startSending() {
+  if (!confirm('Start processing the email queue now?')) return;
+  
+  fetch('/email-outreach/queue/send', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'}
+  })
+  .then(res => res.json())
+  .then(data => {
+    alert(data.message || 'Started sending emails in background');
+  })
+  .catch(err => alert('Error starting queue: ' + err.message));
 }
 </script>
 `;

@@ -2,16 +2,20 @@
 let content = `
 <div class="container-fluid py-4">
   <div class="row mb-4">
-    <div class="col-12 d-flex justify-content-between align-items-center">
       <div>
         <h1><i class="bi bi-list-ul"></i> Email Queue</h1>
         <p class="text-muted">View and manage queued emails</p>
       </div>
-      ${stats.pending > 0 ? `
-        <button type="button" class="btn btn-outline-danger" onclick="confirmClearQueue()">
-          <i class="bi bi-x-circle"></i> Clear Queue (${stats.pending})
+      <div>
+        <button type="button" class="btn btn-success me-2" onclick="startSending()" id="btnStartSending">
+          <i class="bi bi-send"></i> Start Sending
         </button>
-      ` : ''}
+        ${stats.pending > 0 ? `
+          <button type="button" class="btn btn-outline-danger" onclick="confirmClearQueue()">
+            <i class="bi bi-x-circle"></i> Clear Queue (${stats.pending})
+          </button>
+        ` : ''}
+      </div>
     </div>
   </div>
 
@@ -163,6 +167,38 @@ let content = `
 </div>
 
 <script>
+function startSending() {
+  const btn = document.getElementById('btnStartSending');
+  const originalText = btn.innerHTML;
+  
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...';
+  
+  fetch('/email-outreach/queue/send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      alert(data.message);
+      // Reload to update stats if needed, though background process takes time
+      // location.reload(); 
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(error => {
+    alert('Error: ' + error.message);
+  })
+  .finally(() => {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  });
+}
+
 function confirmClearQueue() {
   if (confirm('Are you sure you want to clear all pending emails from the queue?')) {
     const form = document.createElement('form');
