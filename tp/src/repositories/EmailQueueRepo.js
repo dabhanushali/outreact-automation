@@ -8,22 +8,29 @@ class EmailQueueRepo {
     return db
       .prepare(
         `
-      SELECT 
-        eq.*, 
+      SELECT
+        eq.*,
         COALESCE(l.campaign_id, bl.campaign_id) as campaign_id,
         COALESCE(bp.blog_name, bp.domain) as company_name,
-      COALESCE(bp.domain, p.domain) as domain,
-      COALESCE(c.name, 'General Outreach') as campaign_name,
-      COALESCE(c.target_url, '') as target_url,
-      b.name as brand_name
-    FROM email_queue eq
-    LEFT JOIN leads l ON eq.lead_id = l.id
-    LEFT JOIN prospects p ON l.prospect_id = p.id
-    LEFT JOIN blog_leads bl ON eq.blog_lead_id = bl.id
-    LEFT JOIN blog_prospects bp ON bl.blog_prospect_id = bp.id
-    LEFT JOIN campaigns c ON (l.campaign_id = c.id OR bl.campaign_id = c.id)
-    LEFT JOIN brands b ON c.brand_id = b.id
-    WHERE eq.status = 'pending' AND eq.scheduled_for <= datetime('now')
+        COALESCE(bp.domain, p.domain) as domain,
+        COALESCE(c.name, 'General Outreach') as campaign_name,
+        COALESCE(c.target_url, '') as target_url,
+        b.name as brand_name,
+        b.smtp_host,
+        b.smtp_port,
+        b.smtp_secure,
+        b.smtp_user,
+        b.smtp_password,
+        b.smtp_from_name,
+        b.smtp_from_email
+      FROM email_queue eq
+      LEFT JOIN leads l ON eq.lead_id = l.id
+      LEFT JOIN prospects p ON l.prospect_id = p.id
+      LEFT JOIN blog_leads bl ON eq.blog_lead_id = bl.id
+      LEFT JOIN blog_prospects bp ON bl.blog_prospect_id = bp.id
+      LEFT JOIN campaigns c ON (l.campaign_id = c.id OR bl.campaign_id = c.id)
+      LEFT JOIN brands b ON eq.brand_id = b.id
+      WHERE eq.status = 'pending' AND eq.scheduled_for <= datetime('now')
       ORDER BY eq.created_at ASC
       LIMIT ?
     `
@@ -44,10 +51,11 @@ class EmailQueueRepo {
   static addToQueue(data) {
     const stmt = db.prepare(`
       INSERT INTO email_queue (
-        lead_id, blog_lead_id, email_id, blog_email_id, template_id, to_email, subject, body, scheduled_for
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime(?))
+        brand_id, lead_id, blog_lead_id, email_id, blog_email_id, template_id, to_email, subject, body, scheduled_for
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(?))
     `);
     return stmt.run(
+      data.brand_id || null,
       data.lead_id || null,
       data.blog_lead_id || null,
       data.email_id || null,

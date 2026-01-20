@@ -60,13 +60,30 @@ let content = `
     <div class="col-12">
       <div class="card">
         <div class="card-header bg-light">
-          <i class="bi bi-gear"></i> Queue Actions
+          <i class="bi bi-gear"></i> Send Emails
         </div>
         <div class="card-body">
-          <div class="alert alert-info">
-            <i class="bi bi-info-circle"></i>
-            <strong>How to send emails:</strong> Run <code>node run-email-sender.js</code> in your terminal.
-            This will process pending emails with rate limiting (30-60s delays between sends).
+          <div class="row align-items-end">
+            <div class="col-md-6">
+              <label for="brandSelect" class="form-label">
+                <strong>Select Brand for Sending:</strong>
+              </label>
+              <select class="form-select" id="brandSelect" name="brand_id">
+                <option value="">-- Select a Brand --</option>
+${brands.map(brand => `
+                <option value="${brand.id}" ${brand.smtp_is_active ? 'selected' : ''}>
+                  ${brand.name} ${!brand.smtp_is_active ? '(SMTP not active)' : ''}
+                </option>`).join('')}
+              </select>
+              <small class="form-text text-muted">
+                ${brands.length === 0 ? '⚠️ No brands with SMTP configured. Go to Settings > Brands to configure SMTP.' : 'Select the brand whose SMTP configuration will be used to send emails.'}
+              </small>
+            </div>
+            <div class="col-md-6">
+              <button type="button" class="btn btn-success ${brands.length === 0 ? 'disabled' : ''}" onclick="startSending()" id="btnStartSending" ${brands.length === 0 ? 'disabled' : ''}>
+                <i class="bi bi-send"></i> Start Sending
+              </button>
+            </div>
           </div>
         </div>
       </div>

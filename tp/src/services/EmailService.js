@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import SmtpConfigRepo from "../repositories/SmtpConfigRepo.js";
+import { BrandRepo } from "../repositories/BrandRepo.js";
 import EmailQueueRepo from "../repositories/EmailQueueRepo.js";
 import { DailyLimitService } from "./DailyLimitService.js";
 import TemplateService from "./TemplateService.js";
@@ -7,21 +8,54 @@ import { db } from "../database/db.js";
 
 class EmailService {
   /**
+   * Get active SMTP configuration
+   * First tries to get brand-specific SMTP, falls back to legacy smtp_config table
+   */
+  static getActiveConfig() {
+    // Try brand-specific SMTP first
+    const brand = BrandRepo.getActiveSMTP();
+
+    if (brand && brand.smtp_is_active) {
+      // Use brand SMTP config
+      return {
+        host: brand.smtp_host,
+        port: brand.smtp_port,
+        secure: brand.smtp_secure === 1,
+        user: brand.smtp_user,
+        password: brand.smtp_password,
+        from_name: brand.smtp_from_name,
+        from_email: brand.smtp_from_email,
+      };
+    }
+
+    // Fallback to legacy smtp_config table
+    const legacyConfig = SmtpConfigRepo.getActive();
+    if (!legacyConfig) {
+      throw new Error(
+        "No active SMTP configuration found. Please configure SMTP settings in Brands."
+      );
+    }
+    return {
+      host: legacyConfig.host,
+      port: legacyConfig.port,
+      secure: legacyConfig.secure === 1,
+      user: legacyConfig.user,
+      password: legacyConfig.password,
+      from_name: legacyConfig.from_name,
+      from_email: legacyConfig.from_email,
+    };
+  }
+
+  /**
    * Get Nodemailer transporter with active SMTP config
    */
   static getTransporter() {
-    const config = SmtpConfigRepo.getActive();
-
-    if (!config) {
-      throw new Error(
-        "No active SMTP configuration found. Please configure SMTP settings."
-      );
-    }
+    const config = this.getActiveConfig();
 
     const transporterConfig = {
       host: config.host,
       port: config.port,
-      secure: config.secure === 1,
+      secure: config.secure,
     };
 
     if (config.user) {
@@ -56,7 +90,7 @@ class EmailService {
   static async sendEmail(to, subject, body, fromName = null, fromEmail = null) {
     try {
       const transporter = this.getTransporter();
-      const config = SmtpConfigRepo.getActive();
+      const config = this.getActiveConfig();
 
       const mailOptions = {
         from: `"${fromName || config.from_name || "Outreach Team"}" <${
@@ -79,6 +113,73 @@ class EmailService {
   }
 
   /**
+   * Send email with specific brand SMTP config
+   */
+  static async sendEmailWithBrand(to, subject, body, brandConfig) {
+    try {
+      console.log("\n📧 Email Sending Configuration:");
+      console.log("  To:", to);
+      console.log("  Brand Config:", JSON.stringify({
+        smtp_host: brandConfig?.smtp_host,
+        smtp_port: brandConfig?.smtp_port,
+        smtp_secure: brandConfig?.smtp_secure,
+        smtp_user: brandConfig?.smtp_user ? "***" : "(none)",
+        smtp_from_email: brandConfig?.smtp_from_email,
+      }, null, 2));
+
+      if (!brandConfig || !brandConfig.smtp_host) {
+        console.log("  ❌ Error: Invalid brand SMTP configuration");
+        console.log("     - brandConfig:", brandConfig);
+        throw new Error("Invalid brand SMTP configuration");
+      }
+
+      // Create transporter with brand config
+      const transporterConfig = {
+        host: brandConfig.smtp_host,
+        port: brandConfig.smtp_port,
+        secure: brandConfig.smtp_secure === 1,
+      };
+
+      if (brandConfig.smtp_user) {
+        transporterConfig.auth = {
+          user: brandConfig.smtp_user,
+          pass: brandConfig.smtp_password,
+        };
+      }
+
+      console.log("  ✅ Transporter config:", JSON.stringify({
+        host: transporterConfig.host,
+        port: transporterConfig.port,
+        secure: transporterConfig.secure,
+        hasAuth: !!transporterConfig.auth,
+      }, null, 2));
+
+      const transporter = nodemailer.createTransport(transporterConfig);
+
+      const mailOptions = {
+        from: `"${brandConfig.smtp_from_name || "Outreach Team"}" <${brandConfig.smtp_from_email}>`,
+        to: to,
+        subject: subject,
+        html: body,
+      };
+
+      console.log("  📨 Sending mail...");
+
+      const info = await transporter.sendMail(mailOptions);
+      console.log("  ✅ Email sent successfully! Message ID:", info.messageId);
+
+      return {
+        success: true,
+        messageId: info.messageId,
+        response: info.response,
+      };
+    } catch (error) {
+      console.log("  ❌ Error sending email:", error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Send queued email
    */
   static async sendQueuedEmail(queueItem) {
@@ -93,16 +194,31 @@ class EmailService {
         queueItem
       );
 
-      // Send the email
-      const result = await this.sendEmail(
+      // Prepare brand config from queue item
+      const brandConfig = {
+        smtp_host: queueItem.smtp_host,
+        smtp_port: queueItem.smtp_port,
+        smtp_secure: queueItem.smtp_secure,
+        smtp_user: queueItem.smtp_user,
+        smtp_password: queueItem.smtp_password,
+        smtp_from_name: queueItem.smtp_from_name,
+        smtp_from_email: queueItem.smtp_from_email,
+      };
+
+      // Send the email using brand SMTP
+      const result = await this.sendEmailWithBrand(
         queueItem.to_email,
         rendered.subject,
-        rendered.body
+        rendered.body,
+        brandConfig
       );
 
       if (result.success) {
         // Update lead status (check if blog lead or regular lead)
+        let campaignId = null;
         if (queueItem.blog_lead_id) {
+          const lead = db.prepare("SELECT campaign_id FROM blog_leads WHERE id = ?").get(queueItem.blog_lead_id);
+          if (lead) campaignId = lead.campaign_id;
           db.prepare(
             `
             UPDATE blog_leads
@@ -111,6 +227,8 @@ class EmailService {
           `
           ).run(queueItem.blog_lead_id);
         } else if (queueItem.lead_id) {
+          const lead = db.prepare("SELECT campaign_id FROM leads WHERE id = ?").get(queueItem.lead_id);
+          if (lead) campaignId = lead.campaign_id;
           db.prepare(
             `
             UPDATE leads
@@ -119,6 +237,21 @@ class EmailService {
           `
           ).run(queueItem.lead_id);
         }
+
+        // Insert into outreach_logs
+        db.prepare(
+          `
+          INSERT INTO outreach_logs (
+            lead_id, blog_lead_id, email_id, blog_email_id, asset_id, status
+          ) VALUES (?, ?, ?, ?, ?, 'SENT')
+          `
+        ).run(
+          queueItem.lead_id || null,
+          queueItem.blog_lead_id || null,
+          queueItem.email_id || null,
+          queueItem.blog_email_id || null,
+          null  // asset_id can be null - represents general outreach
+        );
 
         // Mark queue as sent
         EmailQueueRepo.markAsSent(queueItem.id, result.messageId);

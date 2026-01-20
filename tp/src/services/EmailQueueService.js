@@ -6,13 +6,14 @@ class EmailQueueService {
   /**
    * Queue single email
    */
-  static queueEmail(leadId, emailId, templateId, scheduledFor = null) {
+  static queueEmail(leadId, emailId, templateId, brandId, scheduledFor = null) {
     try {
       // Prepare email with template
       const emailData = TemplateService.prepareEmail(templateId, leadId, emailId);
 
       // Add to queue
       const result = EmailQueueRepo.addToQueue({
+        brand_id: brandId,
         ...emailData,
         scheduled_for: scheduledFor,
       });
@@ -26,13 +27,13 @@ class EmailQueueService {
   /**
    * Queue multiple leads with template
    */
-  static queueBulk(leadEmailPairs, templateId, scheduledFor = null) {
+  static queueBulk(leadEmailPairs, templateId, brandId = null, scheduledFor = null) {
     const results = [];
     const errors = [];
 
     for (const pair of leadEmailPairs) {
       try {
-        const result = this.queueEmail(pair.lead_id, pair.email_id, templateId, scheduledFor);
+        const result = this.queueEmail(pair.lead_id, pair.email_id, templateId, brandId, scheduledFor);
         if (result.success) {
           results.push(result);
         } else {
@@ -50,6 +51,9 @@ class EmailQueueService {
    * Queue all READY blog leads for a campaign
    */
   static queueCampaignLeads(campaignId, templateId, limit = null) {
+    // Get brand_id from campaign
+    const campaign = db.prepare('SELECT brand_id FROM campaigns WHERE id = ?').get(campaignId);
+
     let query = `
       SELECT bl.id as lead_id, be.id as email_id
       FROM blog_leads bl
@@ -72,7 +76,7 @@ class EmailQueueService {
       return { queued: 0, message: 'No READY blog leads found with domain-matched, non-generic emails' };
     }
 
-    return this.queueBulk(leads, templateId);
+    return this.queueBulk(leads, templateId, campaign?.brand_id || null);
   }
 
   /**
@@ -153,7 +157,7 @@ class EmailQueueService {
   /**
    * Queue selected leads
    */
-  static queueSelectedLeads(leadIds, emailIds, templateId) {
+  static queueSelectedLeads(leadIds, emailIds, templateId, brandId) {
     const pairs = [];
 
     for (let i = 0; i < leadIds.length; i++) {
@@ -163,7 +167,7 @@ class EmailQueueService {
       });
     }
 
-    return this.queueBulk(pairs, templateId);
+    return this.queueBulk(pairs, templateId, brandId);
   }
 }
 

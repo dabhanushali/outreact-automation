@@ -472,10 +472,10 @@ export class OutreachOrchestrator {
     const queries = db
       .prepare(
         `
-        SELECT sq.*, ok.phrase, c.name as city
+        SELECT sq.*, ok.phrase, c.name as location
         FROM search_queries sq
         JOIN outreach_keywords ok ON sq.keyword_id = ok.id
-        JOIN cities c ON sq.city_id = c.id
+        JOIN cities c ON sq.location_id = c.id
         ORDER BY RANDOM()
         LIMIT ?
       `
@@ -493,7 +493,7 @@ export class OutreachOrchestrator {
       }
 
       console.log(`\n[${processed + 1}/${queries.length}] ${queryRow.query}`);
-      console.log(`  Keyword: "${queryRow.phrase}" | City: ${queryRow.city}`);
+      console.log(`  Keyword: "${queryRow.phrase}" | Location: ${queryRow.location}`);
 
       // Search Google
       const results = await GoogleSearch.search(queryRow.query, 10);
@@ -519,7 +519,7 @@ export class OutreachOrchestrator {
           queryRow.query,
           campaignId,
           "google",
-          queryRow.city
+          queryRow.location
         );
 
         // Small delay
@@ -548,7 +548,7 @@ export class OutreachOrchestrator {
    * @param {string} sourceQuery - The search query/source
    * @param {number} campaignId - Campaign ID
    * @param {string} sourceType - Source type (google, clutch, goodfirms, etc.)
-   * @param {string} city - City name (optional)
+   * @param {string} location - Location name (optional)
    * @param {string} country - Country name (optional)
    */
   static async processProspect(
@@ -558,7 +558,7 @@ export class OutreachOrchestrator {
     sourceQuery,
     campaignId,
     sourceType = "google",
-    city = null,
+    location = null,
     country = null
   ) {
     try {

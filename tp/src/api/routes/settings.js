@@ -1,19 +1,18 @@
 import express from "express";
 import { db } from "../../database/db.js";
 import { DailyLimitService } from "../../services/DailyLimitService.js";
+import { BrandRepo } from "../../repositories/BrandRepo.js";
 
 const router = express.Router();
 
 // Brands management
 router.get("/settings/brands", (req, res) => {
   try {
-    const brands = db.prepare("SELECT * FROM brands ORDER BY name").all();
+    const brands = BrandRepo.getAll();
 
     // Get campaign count for each brand
     brands.forEach((brand) => {
-      const count = db
-        .prepare("SELECT COUNT(*) as count FROM campaigns WHERE brand_id = ?")
-        .get(brand.id);
+      const count = BrandRepo.getCampaignCount(brand.id);
       brand.campaign_count = count.count;
     });
 
@@ -26,15 +25,42 @@ router.get("/settings/brands", (req, res) => {
   }
 });
 
+// View brand details/edit
+router.get("/settings/brands/:id/edit", (req, res) => {
+  try {
+    const brand = BrandRepo.getById(req.params.id);
+    if (!brand) {
+      return res.status(404).render("error", {
+        error: "Brand not found",
+        user: req.session,
+      });
+    }
+
+    const campaignCount = BrandRepo.getCampaignCount(brand.id);
+
+    res.render("settings/brand-form", {
+      brand,
+      campaignCount,
+      user: req.session,
+    });
+  } catch (error) {
+    console.error("Error loading brand:", error);
+    res.status(500).render("error", {
+      error: "Failed to load brand: " + error.message,
+      user: req.session,
+    });
+  }
+});
+
 // Create brand
 router.post("/settings/brands", (req, res) => {
   try {
     const { name, website } = req.body;
 
-    db.prepare("INSERT INTO brands (name, website) VALUES (?, ?)").run(
+    const id = db.prepare("INSERT INTO brands (name, website) VALUES (?, ?)").run(
       name,
       website || null
-    );
+    ).lastInsertRowid;
 
     res.redirect("/settings/brands");
   } catch (error) {
@@ -46,25 +72,69 @@ router.post("/settings/brands", (req, res) => {
   }
 });
 
+// Update brand
+router.post("/settings/brands/:id", (req, res) => {
+  try {
+    const id = req.params.id;
+    const {
+      name,
+      website,
+      smtp_host,
+      smtp_port,
+      smtp_secure,
+      smtp_user,
+      smtp_password,
+      smtp_from_name,
+      smtp_from_email,
+      smtp_is_active
+    } = req.body;
+
+    const brand = BrandRepo.update(id, {
+      name,
+      website,
+      smtp_host: smtp_host || null,
+      smtp_port: smtp_port ? parseInt(smtp_port) : null,
+      smtp_secure: smtp_secure === "true" || smtp_secure === true || smtp_secure === 1,
+      smtp_user: smtp_user || null,
+      smtp_password: smtp_password || null,
+      smtp_from_name: smtp_from_name || null,
+      smtp_from_email: smtp_from_email || null,
+      smtp_is_active: smtp_is_active === "true" || smtp_is_active === true || smtp_is_active === 1,
+    });
+
+    res.redirect("/settings/brands");
+  } catch (error) {
+    console.error("Error updating brand:", error);
+    res.status(500).render("error", {
+      error: "Failed to update brand: " + error.message,
+      user: req.session,
+    });
+  }
+});
+
+// Test SMTP connection
+router.post("/settings/brands/:id/test", (req, res) => {
+  try {
+    const result = BrandRepo.testConnection(req.params.id);
+    res.json(result);
+  } catch (error) {
+    console.error("Error testing SMTP:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Delete brand
 router.post("/settings/brands/:id/delete", (req, res) => {
   try {
     const id = req.params.id;
+    const result = BrandRepo.delete(id);
 
-    // Check if brand has campaigns
-    const campaignCount = db
-      .prepare("SELECT COUNT(*) as count FROM campaigns WHERE brand_id = ?")
-      .get(id);
-
-    if (campaignCount.count > 0) {
+    if (!result.success) {
       return res.status(400).render("error", {
-        error:
-          "Cannot delete brand with associated campaigns. Delete campaigns first.",
+        error: result.error,
         user: req.session,
       });
     }
-
-    db.prepare("DELETE FROM brands WHERE id = ?").run(id);
 
     res.redirect("/settings/brands");
   } catch (error) {
@@ -228,6 +298,108 @@ router.post("/settings/keywords/:id/delete", (req, res) => {
     console.error("Error deleting keyword:", error);
     res.status(500).render("error", {
       error: "Failed to delete keyword: " + error.message,
+      user: req.session,
+    });
+  }
+});
+
+// Import keywords from CSV
+router.post("/settings/keywords/import-csv", async (req, res) => {
+  try {
+    const { csv_url } = req.body;
+
+    if (!csv_url) {
+      return res.status(400).render("error", {
+        error: "CSV URL is required",
+        user: req.session,
+      });
+    }
+
+    console.log(`Importing keywords from: ${csv_url}`);
+
+    let targetUrl = csv_url;
+    // Auto-fix Google Sheet edit URLs to export CSV format
+    if (
+      targetUrl.includes("docs.google.com/spreadsheets") &&
+      targetUrl.includes("/edit")
+    ) {
+      targetUrl = targetUrl.replace(/\/edit.*$/, "/export?format=csv");
+      console.log(`Auto-corrected Google Sheet URL to: ${targetUrl}`);
+    }
+
+    // Fetch CSV
+    const response = await fetch(targetUrl);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch sheet: ${response.status} ${response.statusText}`
+      );
+    }
+    const csvText = await response.text();
+
+    // Check for HTML content (common when sheet is not public)
+    if (csvText.includes("<!DOCTYPE html") || csvText.includes("<html")) {
+      return res.status(400).render("error", {
+        error:
+          'Invalid CSV: The link returned a webpage instead of a CSV. Please make sure the Google Sheet is "Published to the Web" (File > Share > Publish to web) or visible to anyone with the link.',
+        user: req.session,
+      });
+    }
+
+    const lines = csvText.split(/\r?\n/).filter((line) => line.trim() !== "");
+    if (lines.length === 0) {
+      return res.redirect("/settings/keywords?error=empty_sheet");
+    }
+
+    // Determine column index from header
+    const headers = lines[0]
+      .split(",")
+      .map((h) => h.trim().replace(/^"|"$/g, "").toLowerCase());
+
+    let keywordCol = headers.indexOf("keyword");
+    if (keywordCol === -1) keywordCol = headers.indexOf("phrase");
+
+    console.log(`Import Debug: Headers: [${headers.join(", ")}]`);
+
+    if (keywordCol === -1) {
+      return res.status(400).render("error", {
+        error: "CSV must have a 'Keyword' or 'Phrase' column",
+        user: req.session,
+      });
+    }
+
+    let added = 0;
+    let skipped = 0;
+
+    db.transaction(() => {
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i]
+          .split(",")
+          .map((c) => c.trim().replace(/^"|"$/g, ""));
+
+        const phrase = cols[keywordCol];
+
+        if (!phrase || phrase.length === 0) {
+          skipped++;
+          continue;
+        }
+
+        try {
+          db.prepare("INSERT OR IGNORE INTO outreach_keywords (phrase) VALUES (?)").run(phrase);
+          added++;
+        } catch (err) {
+          // Skip duplicates
+          skipped++;
+        }
+      }
+    })();
+
+    console.log(`Import Result: Added ${added}, Skipped ${skipped}`);
+
+    res.redirect(`/settings/keywords?success=imported_${added}`);
+  } catch (error) {
+    console.error("Error importing keywords:", error);
+    res.status(500).render("error", {
+      error: "Failed to import keywords: " + error.message,
       user: req.session,
     });
   }

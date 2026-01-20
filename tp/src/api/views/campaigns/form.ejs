@@ -45,14 +45,9 @@ ${brands.map(brand => `
 
             <div class="mb-3">
               <label for="keywords" class="form-label">Keywords</label>
-              <select class="form-select" id="keywords" name="keywords" multiple>
-${keywords.map(kw => `
-                <option value="${kw.phrase}"
-                  ${campaign && campaign.keywords.includes(kw.phrase) ? 'selected' : ''}>
-                  ${kw.phrase}
-                </option>`).join('')}
-              </select>
-              <div class="form-text">Hold Ctrl/Cmd to select multiple keywords</div>
+              <textarea class="form-control" id="keywords" name="keywords" rows="4"
+                placeholder="e.g.&#10;software development&#10;web design&#10;mobile apps">${campaign ? campaign.keywords : ''}</textarea>
+              <div class="form-text">Enter each keyword on a new line</div>
             </div>
 
             <hr>

@@ -17,6 +17,15 @@ function initSchema() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       website TEXT,
+      -- SMTP Configuration
+      smtp_host TEXT,
+      smtp_port INTEGER DEFAULT 587,
+      smtp_secure INTEGER DEFAULT 0,
+      smtp_user TEXT,
+      smtp_password TEXT,
+      smtp_from_name TEXT,
+      smtp_from_email TEXT,
+      smtp_is_active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -32,7 +41,8 @@ function initSchema() {
       target_url TEXT,
       keywords TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (brand_id) REFERENCES brands(id)
+      FOREIGN KEY (brand_id) REFERENCES brands(id),
+      UNIQUE (brand_id, name)
     );
   `);
 
@@ -212,9 +222,11 @@ function initSchema() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS outreach_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      lead_id INTEGER NOT NULL,
-      asset_id INTEGER NOT NULL,
+      lead_id INTEGER,
+      blog_lead_id INTEGER,
+      asset_id INTEGER,
       email_id INTEGER,
+      blog_email_id INTEGER,
       status TEXT CHECK(status IN (
         'SENT',
         'OPENED',
@@ -223,9 +235,12 @@ function initSchema() {
       )) DEFAULT 'SENT',
       sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (lead_id) REFERENCES leads(id),
+      FOREIGN KEY (blog_lead_id) REFERENCES blog_leads(id),
       FOREIGN KEY (asset_id) REFERENCES campaign_assets(id),
       FOREIGN KEY (email_id) REFERENCES emails(id),
-      UNIQUE (lead_id, asset_id)
+      FOREIGN KEY (blog_email_id) REFERENCES blog_emails(id),
+      CHECK (lead_id IS NOT NULL OR blog_lead_id IS NOT NULL),
+      CHECK (email_id IS NOT NULL OR blog_email_id IS NOT NULL)
     );
   `);
 
@@ -250,6 +265,7 @@ function initSchema() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS email_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      brand_id INTEGER REFERENCES brands(id),
       lead_id INTEGER REFERENCES leads(id),
       blog_lead_id INTEGER REFERENCES blog_leads(id),
       email_id INTEGER REFERENCES emails(id),
@@ -298,6 +314,26 @@ function initSchema() {
       value TEXT NOT NULL UNIQUE,
       reason TEXT,
       added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  /* =========================
+     DIRECTORIES
+  ========================= */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS directories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL UNIQUE,
+      platform TEXT CHECK(platform IN ('clutch','goodfirms','other')) NOT NULL,
+      country TEXT,
+      city TEXT,
+      category TEXT,
+      is_active INTEGER DEFAULT 1,
+      last_scraped_at DATETIME,
+      scrape_count INTEGER DEFAULT 0,
+      companies_found INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
@@ -406,7 +442,10 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_blog_leads_campaign ON blog_leads(campaign_id);
     CREATE INDEX IF NOT EXISTS idx_blog_leads_status ON blog_leads(status);
     CREATE INDEX IF NOT EXISTS idx_outreach_lead ON outreach_logs(lead_id);
+    CREATE INDEX IF NOT EXISTS idx_outreach_blog_lead ON outreach_logs(blog_lead_id);
     CREATE INDEX IF NOT EXISTS idx_exclusions_value ON exclusions(value);
+    CREATE INDEX IF NOT EXISTS idx_directories_platform ON directories(platform);
+    CREATE INDEX IF NOT EXISTS idx_directories_active ON directories(is_active);
     CREATE INDEX IF NOT EXISTS idx_email_queue_status ON email_queue(status);
     CREATE INDEX IF NOT EXISTS idx_email_queue_scheduled ON email_queue(scheduled_for);
   `);
@@ -567,22 +606,22 @@ function populateInitialData() {
   }
   console.log(`  ✓ Processed search modifiers`);
 
-  // 5. Generate Search Queries (Keyword + City)
+  // 5. Generate Search Queries (Keyword + Location)
   const insertQuery = db.prepare(
-    "INSERT OR IGNORE INTO search_queries (keyword_id, city_id, query) VALUES (?, ?, ?)"
+    "INSERT OR IGNORE INTO search_queries (keyword_id, location_id, query) VALUES (?, ?, ?)"
   );
   const insertMany = db.transaction((qs) => {
     for (const q of qs) {
-      insertQuery.run(q.keywordId, q.cityId, q.query);
+      insertQuery.run(q.keywordId, q.locationId, q.query);
     }
   });
 
   const queries = [];
   for (const [keyword, keywordId] of Object.entries(keywordIds)) {
-    for (const [cityKey, cityId] of Object.entries(cityIds)) {
-      const cityName = cityKey.split("_")[0];
-      const query = `${keyword} ${cityName}`;
-      queries.push({ keywordId, cityId, query });
+    for (const [locationKey, locationId] of Object.entries(cityIds)) {
+      const locationName = locationKey.split("_")[0];
+      const query = `${keyword} ${locationName}`;
+      queries.push({ keywordId, locationId, query });
     }
   }
 
@@ -622,9 +661,9 @@ function populateInitialData() {
   }
   console.log(`  ✓ Processed system settings`);
 
-  // 7. Insert Default Brand and Campaign (Fix missing initial data)
+  // 7. Insert Default Brand and Campaign (only if not exists)
   const defaultBrand = { name: "My Agency", website: "https://example.com" };
-  db.prepare("INSERT OR IGNORE INTO brands (name, website) VALUES (?, ?)").run(
+  const brandInfo = db.prepare("INSERT OR IGNORE INTO brands (name, website) VALUES (?, ?)").run(
     defaultBrand.name,
     defaultBrand.website
   );
@@ -638,46 +677,73 @@ function populateInitialData() {
       .prepare("INSERT OR IGNORE INTO campaigns (name, brand_id) VALUES (?, ?)")
       .run(defaultCampaign.name, defaultCampaign.brand_id);
 
-    // If newly created or exists, get ID
-    const campaignRow = db
-      .prepare("SELECT id FROM campaigns WHERE name = ? AND brand_id = ?")
-      .get(defaultCampaign.name, defaultCampaign.brand_id);
-    if (campaignRow)
-      console.log(
-        `  ✓ Default Campaign 'General Outreach' ready (ID: ${campaignRow.id})`
-      );
-  }
-
-  // 8. Insert Default Email Templates
-  const templates = [
-    {
-      name: "General Connection",
-      subject: "Partnership Inquiry - {{company}}",
-      body: "Hi Team,\n\nI was browsing your website {{domain}} and found it very interesting.\n\nWe are looking for potential partners in this space. Would you be open to a quick chat?\n\nBest,\n[Your Name]",
-    },
-    {
-      name: "Link Exchange",
-      subject: "Collaboration Opportunity",
-      body: "Hello,\n\nI run a blog in a similar niche and think our audiences would benefit from a collaboration.\n\nAre you open to guest posts or link exchanges?\n\nCheers,\n[Your Name]",
-    },
-  ];
-
-  const insertTemplate = db.prepare(
-    "INSERT OR IGNORE INTO email_templates (name, subject, body, variables, is_active) VALUES (?, ?, ?, '{{company}},{{domain}}', 1)"
-  ); // Note: simplified check, assuming name unique constraint not there? Checked schema, name is not unique but we can query first.
-
-  // Checking schema, name is NOT unique in email_templates definition above. So we check manually.
-  const checkTemplate = db.prepare(
-    "SELECT id FROM email_templates WHERE name = ?"
-  );
-  let tCount = 0;
-  for (const t of templates) {
-    if (!checkTemplate.get(t.name)) {
-      insertTemplate.run(t.name, t.subject, t.body);
-      tCount++;
+    // Only log if actually created
+    if (campaignInfo.changes > 0) {
+      const campaignRow = db
+        .prepare("SELECT id FROM campaigns WHERE name = ? AND brand_id = ?")
+        .get(defaultCampaign.name, defaultCampaign.brand_id);
+      if (campaignRow)
+        console.log(
+          `  ✓ Created default campaign 'General Outreach' (ID: ${campaignRow.id})`
+        );
     }
   }
-  console.log(`  ✓ Added ${tCount} default email templates`);
+
+  // 8. Insert Default Directories
+  const directories = [
+    // Clutch - India
+    { name: "Clutch - Ahmedabad", url: "https://clutch.co/in/developers/ahmedabad", platform: "clutch", country: "India", city: "Ahmedabad", category: "software" },
+    { name: "Clutch - Bangalore", url: "https://clutch.co/in/developers/bangalore", platform: "clutch", country: "India", city: "Bangalore", category: "software" },
+    { name: "Clutch - Hyderabad", url: "https://clutch.co/in/developers/hyderabad", platform: "clutch", country: "India", city: "Hyderabad", category: "software" },
+    { name: "Clutch - Chennai", url: "https://clutch.co/in/developers/chennai", platform: "clutch", country: "India", city: "Chennai", category: "software" },
+    { name: "Clutch - Pune", url: "https://clutch.co/in/developers/pune", platform: "clutch", country: "India", city: "Pune", category: "software" },
+    { name: "Clutch - Mumbai", url: "https://clutch.co/in/developers/mumbai", platform: "clutch", country: "India", city: "Mumbai", category: "software" },
+    { name: "Clutch - Noida", url: "https://clutch.co/in/developers/noida", platform: "clutch", country: "India", city: "Noida", category: "software" },
+    { name: "Clutch - Delhi", url: "https://clutch.co/in/developers/delhi", platform: "clutch", country: "India", city: "Delhi", category: "software" },
+    { name: "Clutch - Kolkata", url: "https://clutch.co/in/developers/kolkata", platform: "clutch", country: "India", city: "Kolkata", category: "software" },
+    { name: "Clutch - Chandigarh", url: "https://clutch.co/in/developers/chandigarh", platform: "clutch", country: "India", city: "Chandigarh", category: "software" },
+    // Clutch - US
+    { name: "Clutch - San Francisco", url: "https://clutch.co/us/software-developers/san-francisco", platform: "clutch", country: "United States", city: "San Francisco", category: "software" },
+    { name: "Clutch - New York", url: "https://clutch.co/us/software-developers/new-york", platform: "clutch", country: "United States", city: "New York", category: "software" },
+    { name: "Clutch - Seattle", url: "https://clutch.co/us/software-developers/seattle", platform: "clutch", country: "United States", city: "Seattle", category: "software" },
+    { name: "Clutch - Austin", url: "https://clutch.co/us/software-developers/austin", platform: "clutch", country: "United States", city: "Austin", category: "software" },
+    { name: "Clutch - Los Angeles", url: "https://clutch.co/us/software-developers/los-angeles", platform: "clutch", country: "United States", city: "Los Angeles", category: "software" },
+    { name: "Clutch - Boston", url: "https://clutch.co/us/software-developers/boston", platform: "clutch", country: "United States", city: "Boston", category: "software" },
+    { name: "Clutch - Chicago", url: "https://clutch.co/us/software-developers/chicago", platform: "clutch", country: "United States", city: "Chicago", category: "software" },
+    { name: "Clutch - Washington DC", url: "https://clutch.co/us/software-developers/washington-dc", platform: "clutch", country: "United States", city: "Washington DC", category: "software" },
+    // Clutch - UK
+    { name: "Clutch - London", url: "https://clutch.co.uk/software-developers/london", platform: "clutch", country: "United Kingdom", city: "London", category: "software" },
+    { name: "Clutch - Manchester", url: "https://clutch.co.uk/software-developers/manchester", platform: "clutch", country: "United Kingdom", city: "Manchester", category: "software" },
+    { name: "Clutch - Birmingham", url: "https://clutch.co.uk/software-developers/birmingham", platform: "clutch", country: "United Kingdom", city: "Birmingham", category: "software" },
+    { name: "Clutch - Edinburgh", url: "https://clutch.co.uk/software-developers/edinburgh", platform: "clutch", country: "United Kingdom", city: "Edinburgh", category: "software" },
+    { name: "Clutch - Leeds", url: "https://clutch.co.uk/software-developers/leeds", platform: "clutch", country: "United Kingdom", city: "Leeds", category: "software" },
+    { name: "Clutch - Bristol", url: "https://clutch.co.uk/software-developers/bristol", platform: "clutch", country: "United Kingdom", city: "Bristol", category: "software" },
+    // Clutch - Canada
+    { name: "Clutch - Toronto", url: "https://clutch.co/ca/software-developers/toronto", platform: "clutch", country: "Canada", city: "Toronto", category: "software" },
+    { name: "Clutch - Vancouver", url: "https://clutch.co/ca/software-developers/vancouver", platform: "clutch", country: "Canada", city: "Vancouver", category: "software" },
+    { name: "Clutch - Montreal", url: "https://clutch.co/ca/software-developers/montreal", platform: "clutch", country: "Canada", city: "Montreal", category: "software" },
+    { name: "Clutch - Ottawa", url: "https://clutch.co/ca/software-developers/ottawa", platform: "clutch", country: "Canada", city: "Ottawa", category: "software" },
+    { name: "Clutch - Calgary", url: "https://clutch.co/ca/software-developers/calgary", platform: "clutch", country: "Canada", city: "Calgary", category: "software" },
+    // Clutch - Australia
+    { name: "Clutch - Sydney", url: "https://clutch.co.au/software-developers/sydney", platform: "clutch", country: "Australia", city: "Sydney", category: "software" },
+    { name: "Clutch - Melbourne", url: "https://clutch.co.au/software-developers/melbourne", platform: "clutch", country: "Australia", city: "Melbourne", category: "software" },
+    { name: "Clutch - Brisbane", url: "https://clutch.co.au/software-developers/brisbane", platform: "clutch", country: "Australia", city: "Brisbane", category: "software" },
+    { name: "Clutch - Perth", url: "https://clutch.co.au/software-developers/perth", platform: "clutch", country: "Australia", city: "Perth", category: "software" },
+    { name: "Clutch - Adelaide", url: "https://clutch.co.au/software-developers/adelaide", platform: "clutch", country: "Australia", city: "Adelaide", category: "software" },
+  ];
+
+  const insertDirectory = db.prepare(
+    "INSERT OR IGNORE INTO directories (name, url, platform, country, city, category) VALUES (?, ?, ?, ?, ?, ?)"
+  );
+  let dirCount = 0;
+  for (const dir of directories) {
+    const result = insertDirectory.run(dir.name, dir.url, dir.platform, dir.country, dir.city, dir.category);
+    if (result.changes > 0) dirCount++;
+  }
+  // Only log if directories were actually created
+  if (dirCount > 0) {
+    console.log(`  ✓ Added ${dirCount} default directories`);
+  }
 
   console.log("Initial data population complete ✅");
 }

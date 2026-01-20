@@ -23,11 +23,16 @@ let content = `
         </div>
         <div class="card-body">
           <form method="POST" action="/settings/keywords" class="row g-3">
-            <div class="col-md-10">
+            <div class="col-md-8">
               <input type="text" name="phrase" class="form-control" placeholder="Enter keyword phrase" required>
             </div>
             <div class="col-md-2">
               <button type="submit" class="btn btn-primary w-100">Add</button>
+            </div>
+            <div class="col-md-2">
+              <button type="button" class="btn btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#importCsvModal">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Import CSV
+              </button>
             </div>
           </form>
         </div>
@@ -76,6 +81,39 @@ ${keywords.length === 0 ? `
           </div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Import CSV Modal -->
+<div class="modal fade" id="importCsvModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="/settings/keywords/import-csv">
+        <div class="modal-header">
+          <h5 class="modal-title">Import Keywords from CSV</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">CSV File URL *</label>
+            <input type="url" name="csv_url" class="form-control"
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+              required>
+            <div class="form-text">
+              Paste the URL of a published CSV or Google Sheet. For Google Sheets, use File > Share > Publish to web.
+            </div>
+          </div>
+          <div class="alert alert-info">
+            <small><strong>CSV Format:</strong> The CSV should have a single column named "Keyword" or "Phrase"<br>
+            Each row should contain one keyword phrase</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Import</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>

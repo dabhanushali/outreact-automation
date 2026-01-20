@@ -482,6 +482,14 @@ router.post("/emails/:id/delete", (req, res) => {
   try {
     const id = req.params.id;
 
+    // Delete in proper order to respect foreign keys
+    // 1. Delete from email_queue
+    db.prepare("DELETE FROM email_queue WHERE email_id = ?").run(id);
+
+    // 2. Delete from outreach_logs
+    db.prepare("DELETE FROM outreach_logs WHERE email_id = ?").run(id);
+
+    // 3. Then delete the email
     db.prepare("DELETE FROM emails WHERE id = ?").run(id);
 
     res.redirect("/emails");
@@ -777,9 +785,14 @@ router.post("/blog-emails/:id/delete", (req, res) => {
       .prepare("SELECT blog_prospect_id FROM blog_emails WHERE id = ?")
       .get(id);
 
-    // Clean up dependencies first
+    // Delete in proper order to respect foreign keys
+    // 1. Delete from email_queue
     db.prepare("DELETE FROM email_queue WHERE blog_email_id = ?").run(id);
 
+    // 2. Delete from outreach_logs
+    db.prepare("DELETE FROM outreach_logs WHERE blog_email_id = ?").run(id);
+
+    // 3. Delete the blog email
     db.prepare("DELETE FROM blog_emails WHERE id = ?").run(id);
 
     if (emailRecord) {

@@ -40,7 +40,6 @@ router.get('/campaigns', (req, res) => {
 router.get('/campaigns/new', (req, res) => {
   try {
     const brands = db.prepare('SELECT * FROM brands ORDER BY name').all();
-    const keywords = db.prepare('SELECT * FROM outreach_keywords ORDER BY phrase').all();
     const cities = db.prepare(`
       SELECT ci.*, co.name as country_name
       FROM cities ci
@@ -50,7 +49,6 @@ router.get('/campaigns/new', (req, res) => {
 
     res.render('campaigns/form', {
       brands,
-      keywords,
       cities,
       campaign: null,
       mode: 'create',
@@ -71,13 +69,14 @@ router.get('/campaigns/:id/edit', (req, res) => {
     }
 
     try {
-      campaign.keywords = JSON.parse(campaign.keywords || '[]');
+      const parsedKeywords = JSON.parse(campaign.keywords || '[]');
+      // Convert array to newline-separated string for the textarea
+      campaign.keywords = Array.isArray(parsedKeywords) ? parsedKeywords.join('\n') : '';
     } catch {
-      campaign.keywords = [];
+      campaign.keywords = '';
     }
 
     const brands = db.prepare('SELECT * FROM brands ORDER BY name').all();
-    const keywords = db.prepare('SELECT * FROM outreach_keywords ORDER BY phrase').all();
     const cities = db.prepare(`
       SELECT ci.*, co.name as country_name
       FROM cities ci
@@ -94,7 +93,6 @@ router.get('/campaigns/:id/edit', (req, res) => {
 
     res.render('campaigns/form', {
       brands,
-      keywords,
       cities,
       campaign,
       assets,
@@ -186,7 +184,10 @@ router.post('/campaigns', (req, res) => {
       VALUES (?, ?, ?, ?)
     `);
 
-    const keywordsArray = Array.isArray(keywords) ? keywords : [keywords];
+    // Split keywords by newline, trim whitespace, and wrap in quotes
+    const keywordsArray = keywords
+      ? keywords.split('\n').map(k => k.trim()).filter(k => k.length > 0).map(k => `"${k}"`)
+      : [];
     const info = stmt.run(brand_id, name, target_url || null, JSON.stringify(keywordsArray));
 
     res.redirect(`/campaigns/${info.lastInsertRowid}`);
@@ -202,7 +203,10 @@ router.post('/campaigns/:id', (req, res) => {
     const { brand_id, name, target_url, keywords } = req.body;
     const id = req.params.id;
 
-    const keywordsArray = Array.isArray(keywords) ? keywords : [keywords];
+    // Split keywords by newline, trim whitespace, and wrap in quotes
+    const keywordsArray = keywords
+      ? keywords.split('\n').map(k => k.trim()).filter(k => k.length > 0).map(k => `"${k}"`)
+      : [];
 
     const stmt = db.prepare(`
       UPDATE campaigns

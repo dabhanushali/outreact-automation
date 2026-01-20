@@ -1,0 +1,181 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/settings">Settings</a></li>
+          <li class="breadcrumb-item"><a href="/settings/brands">Brands</a></li>
+          <li class="breadcrumb-item active">${brand ? 'Edit Brand' : 'New Brand'}</li>
+        </ol>
+      </nav>
+      <h1>
+        <i class="bi bi-${brand ? 'pencil' : 'plus-circle'}"></i>
+        ${brand ? 'Edit Brand' : 'New Brand'}
+      </h1>
+      ${brand ? `
+      <p class="text-muted">
+        Campaigns: <strong>${campaignCount?.count || 0}</strong>
+      </p>` : ''}
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      <form method="POST" action="${brand ? `/settings/brands/${brand.id}` : '/settings/brands'}">
+        <!-- Brand Information -->
+        <div class="card mb-4">
+          <div class="card-header bg-primary text-white">
+            <i class="bi bi-tag"></i> Brand Information
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label for="name" class="form-label">Brand Name *</label>
+                <input type="text" class="form-control" id="name" name="name"
+                  value="${brand?.name || ''}" required>
+              </div>
+              <div class="col-md-6">
+                <label for="website" class="form-label">Website</label>
+                <input type="url" class="form-control" id="website" name="website"
+                  value="${brand?.website || ''}" placeholder="https://">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SMTP Configuration -->
+        <div class="card mb-4">
+          <div class="card-header bg-info text-white">
+            <i class="bi bi-envelope"></i> SMTP Configuration
+          </div>
+          <div class="card-body">
+            <div class="row g-3 mb-3">
+              <div class="col-12">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="smtp_is_active" name="smtp_is_active"
+                    value="true" ${brand?.smtp_is_active ? 'checked' : ''}>
+                  <label class="form-check-label" for="smtp_is_active">
+                    <strong>Enable SMTP for this brand</strong>
+                  </label>
+                </div>
+                <small class="form-text text-muted">
+                  When enabled, this brand's SMTP configuration will be used for sending emails.
+                </small>
+              </div>
+            </div>
+
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label for="smtp_host" class="form-label">SMTP Host</label>
+                <input type="text" class="form-control" id="smtp_host" name="smtp_host"
+                  value="${brand?.smtp_host || ''}" placeholder="smtp.gmail.com">
+                <small class="form-text text-muted">e.g., smtp.gmail.com, smtp.office365.com</small>
+              </div>
+              <div class="col-md-3">
+                <label for="smtp_port" class="form-label">Port</label>
+                <input type="number" class="form-control" id="smtp_port" name="smtp_port"
+                  value="${brand?.smtp_port || '587'}" placeholder="587">
+                <small class="form-text text-muted">Common: 587 (TLS), 465 (SSL)</small>
+              </div>
+              <div class="col-md-3">
+                <label for="smtp_secure" class="form-label">Security</label>
+                <select class="form-select" id="smtp_secure" name="smtp_secure">
+                  <option value="false" ${!brand?.smtp_secure ? 'selected' : ''}>TLS/STARTTLS</option>
+                  <option value="true" ${brand?.smtp_secure ? 'selected' : ''}>SSL/TLS</option>
+                </select>
+              </div>
+            </div>
+
+            <hr>
+
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label for="smtp_user" class="form-label">SMTP Username</label>
+                <input type="text" class="form-control" id="smtp_user" name="smtp_user"
+                  value="${brand?.smtp_user || ''}" placeholder="user@example.com">
+              </div>
+              <div class="col-md-6">
+                <label for="smtp_password" class="form-label">SMTP Password</label>
+                <input type="password" class="form-control" id="smtp_password" name="smtp_password"
+                  placeholder="${brand?.smtp_password ? '••••••••' : 'Enter password'}">
+                <small class="form-text text-muted">
+                  ${brand?.smtp_password ? 'Leave empty to keep existing password' : 'Enter SMTP password'}
+                </small>
+              </div>
+            </div>
+
+            <hr>
+
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label for="smtp_from_name" class="form-label">From Name</label>
+                <input type="text" class="form-control" id="smtp_from_name" name="smtp_from_name"
+                  value="${brand?.smtp_from_name || ''}" placeholder="Sender Name">
+                <small class="form-text text-muted">Display name for outgoing emails</small>
+              </div>
+              <div class="col-md-6">
+                <label for="smtp_from_email" class="form-label">From Email</label>
+                <input type="email" class="form-control" id="smtp_from_email" name="smtp_from_email"
+                  value="${brand?.smtp_from_email || ''}" placeholder="sender@example.com">
+                <small class="form-text text-muted">Sender email address</small>
+              </div>
+            </div>
+
+            ${brand ? `
+            <hr>
+            <div class="row">
+              <div class="col-12">
+                <button type="button" class="btn btn-outline-warning" id="testSmtpBtn">
+                  <i class="bi bi-wifi"></i> Test SMTP Connection
+                </button>
+                <span id="testResult" class="ms-2"></span>
+              </div>
+            </div>
+            <script>
+            document.getElementById('testSmtpBtn').addEventListener('click', async function() {
+              const btn = this;
+              const result = document.getElementById('testResult');
+              btn.disabled = true;
+              result.innerHTML = '<span class="text-muted"><i class="bi bi-hourglass-split"></i> Testing...</span>';
+
+              try {
+                const response = await fetch('/settings/brands/${brand.id}/test', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                  result.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> ' + data.message + '</span>';
+                } else {
+                  result.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> ' + data.error + '</span>';
+                }
+              } catch (error) {
+                result.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Test failed</span>';
+              } finally {
+                btn.disabled = false;
+              }
+            });
+            </script>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-circle"></i> ${brand ? 'Update Brand' : 'Create Brand'}
+          </button>
+          <a href="/settings/brands" class="btn btn-secondary">
+            <i class="bi bi-x-circle"></i> Cancel
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+`;
+%>
+<%- include('../layout', { title: `${brand ? 'Edit' : 'New'} Brand - Settings`, activePage: 'settings', content: content, user: user }) %>

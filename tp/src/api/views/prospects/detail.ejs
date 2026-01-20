@@ -86,7 +86,7 @@
               <td>${prospect.company_name || '-'}</td>
             </tr>
             <tr>
-              <th>City:</th>
+              <th>Location:</th>
               <td>${prospect.city || '-'}</td>
             </tr>
             <tr>
@@ -257,16 +257,17 @@
 
           <div class="mb-3">
             <label class="form-label">Select Campaign (Lead)</label>
-            <select name="lead_id" class="form-select" required>
+            <select name="lead_id" id="campaignSelect" class="form-select" required>
               <option value="">Choose a campaign...</option>
               ${leads.map(l => `
-              <option value="${l.id}">
+              <option value="${l.id}" data-brand-id="${l.brand_id}" data-brand-name="${l.brand_name}">
                 ${l.campaign_name} (${l.brand_name})
+                ${l.smtp_configured ? '<span class="badge bg-success ms-2">SMTP ✓</span>' : '<span class="badge bg-warning ms-2">No SMTP</span>'}
               </option>
               `).join('')}
             </select>
             <div class="form-text">
-              Select which campaign this email is for.
+              Select which campaign this email is for. The campaign's brand SMTP will be used.
             </div>
           </div>
 
@@ -304,17 +305,20 @@
 
   function submitQueue() {
     const emailId = document.getElementById("queueEmailId").value;
-    const leadId = document.querySelector(
-      '#queueForm select[name="lead_id"]'
-    ).value;
+    const leadId = document.getElementById("campaignSelect").value;
     const templateId = document.querySelector(
       '#queueForm select[name="template_id"]'
     ).value;
 
     if (!leadId || !templateId) {
-      alert("Please select both a campaign and a template");
+      alert("Please select campaign and template");
       return;
     }
+
+    // Get brand_id from selected campaign option
+    const campaignSelect = document.getElementById("campaignSelect");
+    const selectedOption = campaignSelect.selectedOptions[0];
+    const brandId = selectedOption.dataset.brandId;
 
     const btn = document.querySelector("#queueEmailModal .btn-primary");
     const originalText = btn.textContent;
@@ -325,6 +329,7 @@
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        brand_id: brandId,
         lead_ids: [leadId],
         email_ids: [emailId],
         template_id: templateId,

@@ -157,10 +157,18 @@ router.get("/email-outreach/queue", (req, res) => {
       .prepare("SELECT id, name FROM campaigns ORDER BY name")
       .all();
 
+    // Get all brands for SMTP selection
+    const brands = db
+      .prepare(
+        "SELECT id, name, smtp_is_active, smtp_host FROM brands ORDER BY name"
+      )
+      .all();
+
     res.render("email-outreach/queue", {
       queuedEmails,
       stats,
       campaigns,
+      brands,
       filters: { status },
       user: req.session,
     });
@@ -186,9 +194,9 @@ router.get("/email-outreach/queue/ready-leads", (req, res) => {
 // Add leads to queue
 router.post("/email-outreach/queue/add", (req, res) => {
   try {
-    const { lead_ids, email_ids, template_id } = req.body;
+    const { brand_id, lead_ids, email_ids, template_id } = req.body;
 
-    if (!lead_ids || !email_ids || !template_id) {
+    if (!brand_id || !lead_ids || !email_ids || !template_id) {
       return res
         .status(400)
         .json({ success: false, error: "Missing required fields" });
@@ -201,7 +209,8 @@ router.post("/email-outreach/queue/add", (req, res) => {
     const result = EmailQueueService.queueSelectedLeads(
       leadIds,
       emailIds,
-      template_id
+      template_id,
+      brand_id
     );
 
     res.json({ success: true, ...result });
@@ -249,8 +258,12 @@ router.post("/email-outreach/queue/general-bulk", (req, res) => {
       }
     })();
 
-    // Queue them
-    const result = EmailQueueService.queueSelectedLeads(leadIds, emailIds, template_id);
+    // Get brand_id from campaign
+    const campaign = db.prepare('SELECT brand_id FROM campaigns WHERE id = ?').get(campaign_id);
+    const brandId = campaign?.brand_id || null;
+
+    // Queue them with brand_id
+    const result = EmailQueueService.queueSelectedLeads(leadIds, emailIds, template_id, brandId);
 
     res.json({ 
       success: true, 
@@ -312,6 +325,8 @@ router.post("/email-outreach/queue/clear", (req, res) => {
 // Process/send queued emails
 router.post("/email-outreach/queue/send", (req, res) => {
   try {
+    const { brand_id } = req.body;
+
     if (EmailService.isSending) {
       return res.json({
         success: true,
@@ -320,7 +335,7 @@ router.post("/email-outreach/queue/send", (req, res) => {
     }
 
     // Start process in background (do not await)
-    EmailService.processQueue()
+    EmailService.processQueue(brand_id)
       .then((result) => {
         console.log("Background email sending finished:", result);
       })

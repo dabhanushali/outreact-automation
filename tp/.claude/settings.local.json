@@ -12,7 +12,8 @@
       "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_run_code",
       "Bash(ls:*)",
-      "Bash(del:*)"
+      "Bash(del:*)",
+      "Bash(npm start)"
     ]
   }
 }

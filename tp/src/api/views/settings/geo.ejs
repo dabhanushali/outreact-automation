@@ -35,12 +35,12 @@ let content = `
     </div>
   </div>
 
-  <!-- Add City -->
+  <!-- Add Location -->
   <div class="row mb-4">
     <div class="col-12">
       <div class="card">
         <div class="card-header">
-          <i class="bi bi-plus-circle"></i> Add City
+          <i class="bi bi-plus-circle"></i> Add Location
         </div>
         <div class="card-body">
           <form method="POST" action="/settings/cities" class="row g-3">
@@ -52,7 +52,7 @@ ${countries.map(c => `
               </select>
             </div>
             <div class="col-md-6">
-              <input type="text" name="name" class="form-control" placeholder="City name" required>
+              <input type="text" name="name" class="form-control" placeholder="Location name" required>
             </div>
             <div class="col-md-2">
               <button type="submit" class="btn btn-primary w-100">Add</button>
@@ -76,7 +76,7 @@ ${countries.map(c => `
               <thead>
                 <tr>
                   <th>Name</th>
-                  <th>Cities</th>
+                  <th>Locations</th>
                 </tr>
               </thead>
               <tbody>
@@ -92,18 +92,18 @@ ${countries.map(c => `
       </div>
     </div>
 
-    <!-- Cities -->
+    <!-- Locations -->
     <div class="col-md-6">
       <div class="card">
         <div class="card-header">
-          <i class="bi bi-building"></i> Cities (First 500)
+          <i class="bi bi-building"></i> Locations (First 500)
         </div>
         <div class="card-body" style="max-height: 400px; overflow-y: auto;">
           <div class="table-responsive">
             <table class="table table-sm">
               <thead>
                 <tr>
-                  <th>City</th>
+                  <th>Location</th>
                   <th>Country</th>
                 </tr>
               </thead>

@@ -6,7 +6,7 @@ const router = express.Router();
 // List prospects with filters
 router.get("/prospects", (req, res) => {
   try {
-    const { campaign, source, status, search } = req.query;
+    const { campaign, source, status, search, has_email } = req.query;
 
     let query = `
       SELECT DISTINCT
@@ -39,12 +39,29 @@ router.get("/prospects", (req, res) => {
       }
     }
 
+    if (has_email) {
+      if (has_email === "yes") {
+        query += " AND e.id IS NOT NULL";
+      } else if (has_email === "no") {
+        query += " AND e.id IS NULL";
+      }
+    }
+
     if (search) {
       query += " AND (p.company_name LIKE ? OR p.domain LIKE ?)";
       params.push(`%${search}%`, `%${search}%`);
     }
 
-    query += " GROUP BY p.id ORDER BY p.created_at DESC LIMIT 500";
+    query += " GROUP BY p.id HAVING 1=1";
+
+    // Apply email count filter after GROUP BY
+    if (has_email === "yes") {
+      query += " AND email_count > 0";
+    } else if (has_email === "no") {
+      query += " AND email_count = 0";
+    }
+
+    query += " ORDER BY p.created_at DESC LIMIT 500";
 
     const prospects = db.prepare(query).all(...params);
 
@@ -68,7 +85,7 @@ router.get("/prospects", (req, res) => {
       prospects,
       campaigns,
       sources,
-      filters: { campaign, source, status, search },
+      filters: { campaign, source, status, search, has_email },
       user: req.session,
     });
   } catch (error) {
@@ -83,13 +100,14 @@ router.get("/prospects", (req, res) => {
 // Export prospects to CSV (must come before :id route)
 router.get("/prospects/export", (req, res) => {
   try {
-    const { campaign, source, status, search } = req.query;
+    const { campaign, source, status, search, has_email } = req.query;
 
     let query = `
       SELECT DISTINCT
         p.*,
         GROUP_CONCAT(DISTINCT e.email) as all_emails,
-        GROUP_CONCAT(DISTINCT e.source_page) as contact_pages
+        GROUP_CONCAT(DISTINCT e.source_page) as contact_pages,
+        COUNT(DISTINCT e.id) as email_count
       FROM prospects p
       LEFT JOIN leads l ON p.id = l.prospect_id
       LEFT JOIN campaigns c ON l.campaign_id = c.id
@@ -116,12 +134,29 @@ router.get("/prospects/export", (req, res) => {
       }
     }
 
+    if (has_email) {
+      if (has_email === "yes") {
+        query += " AND e.id IS NOT NULL";
+      } else if (has_email === "no") {
+        query += " AND e.id IS NULL";
+      }
+    }
+
     if (search) {
       query += " AND (p.company_name LIKE ? OR p.domain LIKE ?)";
       params.push(`%${search}%`, `%${search}%`);
     }
 
-    query += " GROUP BY p.id ORDER BY p.created_at DESC";
+    query += " GROUP BY p.id HAVING 1=1";
+
+    // Apply email count filter after GROUP BY
+    if (has_email === "yes") {
+      query += " AND email_count > 0";
+    } else if (has_email === "no") {
+      query += " AND email_count = 0";
+    }
+
+    query += " ORDER BY p.created_at DESC";
 
     const prospects = db.prepare(query).all(...params);
 
@@ -310,7 +345,9 @@ router.get("/prospects/:id", (req, res) => {
       SELECT
         l.*,
         c.name as campaign_name,
-        b.name as brand_name
+        b.name as brand_name,
+        b.id as brand_id,
+        CASE WHEN b.smtp_is_active = 1 AND b.smtp_host IS NOT NULL THEN 1 ELSE 0 END as smtp_configured
       FROM leads l
       JOIN campaigns c ON l.campaign_id = c.id
       JOIN brands b ON c.brand_id = b.id
@@ -372,9 +409,22 @@ router.post("/prospects/:id/delete", (req, res) => {
   try {
     const id = req.params.id;
 
-    // Delete related records
+    // Delete in proper order to respect foreign keys
+    // 1. Delete from email_queue where linked to this prospect's leads or emails
+    db.prepare(
+      "DELETE FROM email_queue WHERE lead_id IN (SELECT id FROM leads WHERE prospect_id = ?)"
+    ).run(id);
+    db.prepare(
+      "DELETE FROM email_queue WHERE email_id IN (SELECT id FROM emails WHERE prospect_id = ?)"
+    ).run(id);
+
+    // 2. Delete leads
     db.prepare("DELETE FROM leads WHERE prospect_id = ?").run(id);
+
+    // 3. Delete emails
     db.prepare("DELETE FROM emails WHERE prospect_id = ?").run(id);
+
+    // 4. Delete prospect
     db.prepare("DELETE FROM prospects WHERE id = ?").run(id);
 
     res.redirect("/prospects");

@@ -297,26 +297,39 @@ router.get("/outreach-logs", (req, res) => {
   try {
     const { campaign, status } = req.query;
 
+    // Query that combines both regular leads and blog leads
     let query = `
       SELECT
-        ol.*,
-        p.domain,
-        p.company_name,
+        ol.id,
+        ol.status,
+        ol.sent_at,
+        ol.lead_id,
+        ol.blog_lead_id,
         c.name as campaign_name,
         ca.title as asset_title,
-        e.email
+        -- Regular lead data
+        p.domain,
+        p.company_name,
+        e.email,
+        -- Blog lead data
+        bp.domain as blog_domain,
+        bp.blog_name,
+        be.email as blog_email
       FROM outreach_logs ol
       LEFT JOIN leads l ON ol.lead_id = l.id
-      LEFT JOIN prospects p ON l.prospect_id = p.id
-      LEFT JOIN campaigns c ON l.campaign_id = c.id
+      LEFT JOIN blog_leads bl ON ol.blog_lead_id = bl.id
+      LEFT JOIN campaigns c ON COALESCE(l.campaign_id, bl.campaign_id) = c.id
       LEFT JOIN campaign_assets ca ON ol.asset_id = ca.id
       LEFT JOIN emails e ON ol.email_id = e.id
+      LEFT JOIN prospects p ON l.prospect_id = p.id
+      LEFT JOIN blog_emails be ON ol.blog_email_id = be.id
+      LEFT JOIN blog_prospects bp ON bl.blog_prospect_id = bp.id
       WHERE 1=1
     `;
     const params = [];
 
     if (campaign) {
-      query += " AND l.campaign_id = ?";
+      query += " AND COALESCE(l.campaign_id, bl.campaign_id) = ?";
       params.push(campaign);
     }
 
@@ -329,6 +342,14 @@ router.get("/outreach-logs", (req, res) => {
 
     const logs = db.prepare(query).all(...params);
 
+    // Normalize logs for display (use blog or regular lead data)
+    const normalizedLogs = logs.map(log => ({
+      ...log,
+      domain: log.blog_domain || log.domain,
+      company_name: log.blog_name || log.company_name,
+      email: log.blog_email || log.email
+    }));
+
     // Get filter options
     const campaigns = db
       .prepare("SELECT id, name FROM campaigns ORDER BY name")
@@ -336,7 +357,7 @@ router.get("/outreach-logs", (req, res) => {
     const statuses = ["SENT", "OPENED", "REPLIED", "REJECTED"];
 
     res.render("leads/outreach-logs", {
-      logs,
+      logs: normalizedLogs,
       campaigns,
       statuses,
       filters: { campaign, status },

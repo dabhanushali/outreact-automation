@@ -1,0 +1,110 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/">Home</a></li>
+          <li class="breadcrumb-item"><a href="/directories">Directories</a></li>
+          <li class="breadcrumb-item active">${directory ? 'Edit' : 'Add'} Directory</li>
+        </ol>
+      </nav>
+      <h1><i class="bi bi-${directory ? 'pencil' : 'plus-circle'}"></i> ${directory ? 'Edit' : 'Add'} Directory</h1>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <form method="POST" action="${directory && directory.id ? '/directories/' + directory.id : '/directories'}" ${directory && directory.id ? '' : 'class="row g-3"'}>
+            <div class="mb-3">
+              <label class="form-label">Name *</label>
+              <input type="text" name="name" class="form-control" value="${directory?.name || ''}" placeholder="e.g., Clutch - Bangalore" required>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">URL *</label>
+              <input type="url" name="url" class="form-control" value="${directory?.url || ''}" placeholder="https://clutch.co/in/developers/bangalore" required>
+            </div>
+
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Platform *</label>
+                <select name="platform" class="form-select" required>
+                  <option value="">Select Platform</option>
+                  <option value="clutch" ${directory?.platform === 'clutch' ? 'selected' : ''}>Clutch</option>
+                  <option value="goodfirms" ${directory?.platform === 'goodfirms' ? 'selected' : ''}>GoodFirms</option>
+                  <option value="other" ${directory?.platform === 'other' ? 'selected' : ''}>Other</option>
+                </select>
+              </div>
+
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Category</label>
+                <input type="text" name="category" class="form-control" value="${directory?.category || ''}" placeholder="e.g., software">
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Country</label>
+                <input type="text" name="country" class="form-control" value="${directory?.country || ''}" placeholder="e.g., India">
+                ${countries.length > 0 ? `
+                <datalist id="countries">
+${countries.map(c => `                  <option value="${c}">`).join('')}
+                </datalist>
+                ` : ''}
+              </div>
+
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Location</label>
+                <input type="text" name="city" class="form-control" value="${directory?.city || ''}" placeholder="e.g., Bangalore">
+              </div>
+            </div>
+
+            <div class="form-check mb-3">
+              <input type="checkbox" name="is_active" class="form-check-input" id="isActive" ${directory?.is_active ? 'checked' : ''}>
+              <label class="form-check-label" for="isActive">
+                Active (available for scraping)
+              </label>
+            </div>
+
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-circle"></i> ${directory ? 'Update' : 'Add'} Directory
+              </button>
+              <a href="/directories" class="btn btn-secondary">Cancel</a>
+              ${directory ? `
+              <a href="${directory.url}" target="_blank" class="btn btn-outline-info">
+                <i class="bi bi-box-arrow-up-right"></i> View URL
+              </a>
+              ` : ''}
+            </div>
+          </form>
+
+${directory ? `
+          <hr>
+          <div class="row text-muted">
+            <div class="col-md-3">
+              <small><strong>ID:</strong> ${directory.id}</small>
+            </div>
+            <div class="col-md-3">
+              <small><strong>Created:</strong> ${new Date(directory.created_at).toLocaleString()}</small>
+            </div>
+            <div class="col-md-3">
+              <small><strong>Last Scraped:</strong> ${directory.last_scraped_at ? new Date(directory.last_scraped_at).toLocaleString() : 'Never'}</small>
+            </div>
+            <div class="col-md-3">
+              <small><strong>Scrape Count:</strong> ${directory.scrape_count || 0}</small>
+            </div>
+          </div>
+        ` : ''}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+%>
+<%- include('../layout', { title: '${directory ? "Edit" : "Add"} Directory', activePage: 'directories', content: content, user: user }) %>

@@ -11,7 +11,7 @@ let content = `
         <a href="/prospects/new" class="btn btn-primary">
           <i class="bi bi-plus-lg"></i> Add Prospect
         </a>
-        <a href="/prospects/export${filters.campaign ? '?campaign=' + filters.campaign : ''}${filters.source ? (filters.campaign ? '&' : '?') + 'source=' + filters.source : ''}${filters.status ? (filters.campaign || filters.source ? '&' : '?') + 'status=' + filters.status : ''}${filters.search ? (filters.campaign || filters.source || filters.status ? '&' : '?') + 'search=' + encodeURIComponent(filters.search) : ''}" class="btn btn-success">
+        <a href="/prospects/export${filters.campaign ? '?campaign=' + filters.campaign : ''}${filters.source ? (filters.campaign ? '&' : '?') + 'source=' + filters.source : ''}${filters.status ? (filters.campaign || filters.source ? '&' : '?') + 'status=' + filters.status : ''}${filters.has_email ? (filters.campaign || filters.source || filters.status ? '&' : '?') + 'has_email=' + filters.has_email : ''}${filters.search ? (filters.campaign || filters.source || filters.status || filters.has_email ? '&' : '?') + 'search=' + encodeURIComponent(filters.search) : ''}" class="btn btn-success">
           <i class="bi bi-file-earmark-spreadsheet"></i> Export CSV
         </a>
       </div>
@@ -24,33 +24,42 @@ let content = `
       <div class="card">
         <div class="card-body">
           <form method="GET" action="/prospects" class="row g-3">
-            <div class="col-md-3">
+            <div class="col-md-2">
               <select name="campaign" class="form-select">
                 <option value="">All Campaigns</option>
                 ${campaigns.map(c => `<option value="${c.id}" ${filters.campaign == c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
               </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
               <select name="source" class="form-select">
                 <option value="">All Sources</option>
                 ${sources.map(s => `<option value="${s}" ${filters.source == s ? 'selected' : ''}>${s}</option>`).join('')}
               </select>
             </div>
-            <div class="col-md-3">
-              <select name="status" class="form-select">
-                <option value="">All Status</option>
-                <option value="with_emails" ${filters.status === 'with_emails' ? 'selected' : ''}>With Emails</option>
-                <option value="without_emails" ${filters.status === 'without_emails' ? 'selected' : ''}>Without Emails</option>
+            <div class="col-md-2">
+              <select name="has_email" class="form-select">
+                <option value="">Has Emails?</option>
+                <option value="yes" ${filters.has_email === 'yes' ? 'selected' : ''}>Has Emails (>0)</option>
+                <option value="no" ${filters.has_email === 'no' ? 'selected' : ''}>No Emails (0)</option>
               </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+              <select name="status" class="form-select">
+                <option value="">All Status</option>
+                <option value="with_emails" ${filters.status === 'with_emails' ? 'selected' : ''}>Extracted</option>
+                <option value="without_emails" ${filters.status === 'without_emails' ? 'selected' : ''}>Not Extracted</option>
+              </select>
+            </div>
+            <div class="col-md-2">
               <input type="text" name="search" class="form-control" placeholder="Search..." value="${filters.search || ''}">
             </div>
-            <div class="col-12">
-              <button type="submit" class="btn btn-primary">
-                <i class="bi bi-funnel"></i> Apply Filters
+            <div class="col-md-2">
+              <button type="submit" class="btn btn-primary w-100">
+                <i class="bi bi-funnel"></i> Filter
               </button>
-              <a href="/prospects" class="btn btn-secondary">Clear</a>
+            </div>
+            <div class="col-12">
+              <a href="/prospects" class="btn btn-secondary">Clear Filters</a>
             </div>
           </form>
         </div>

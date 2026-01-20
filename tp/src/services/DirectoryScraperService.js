@@ -1,5 +1,6 @@
 import { chromium } from "playwright-extra";
 import stealthPlugin from "puppeteer-extra-plugin-stealth";
+import DirectoryRepo from "../repositories/DirectoryRepo.js";
 
 // Add stealth plugin
 chromium.use(stealthPlugin());
@@ -847,80 +848,47 @@ export class DirectoryScraperService {
 
   /**
    * Get directory URLs for specific cities
+   * @param {Object} filters - Optional filters {platform, country, is_active}
    * @returns {Object} - {clutch: [], goodfirms: []}
    */
-  static getDirectoryUrls() {
-    return {
-      clutch: [
-        // India
-        "https://clutch.co/in/developers/ahmedabad",
-        "https://clutch.co/in/developers/bangalore",
-        "https://clutch.co/in/developers/hyderabad",
-        "https://clutch.co/in/developers/chennai",
-        "https://clutch.co/in/developers/pune",
-        "https://clutch.co/in/developers/mumbai",
-        "https://clutch.co/in/developers/noida",
-        "https://clutch.co/in/developers/delhi",
-        "https://clutch.co/in/developers/kolkata",
-        "https://clutch.co/in/developers/chandigarh",
-        // US
-        "https://clutch.co/us/software-developers/san-francisco",
-        "https://clutch.co/us/software-developers/new-york",
-        "https://clutch.co/us/software-developers/seattle",
-        "https://clutch.co/us/software-developers/austin",
-        "https://clutch.co/us/software-developers/los-angeles",
-        "https://clutch.co/us/software-developers/boston",
-        "https://clutch.co/us/software-developers/chicago",
-        "https://clutch.co/us/software-developers/washington-dc",
-        // UK
-        "https://clutch.co.uk/software-developers/london",
-        "https://clutch.co.uk/software-developers/manchester",
-        "https://clutch.co.uk/software-developers/birmingham",
-        "https://clutch.co.uk/software-developers/edinburgh",
-        "https://clutch.co.uk/software-developers/leeds",
-        "https://clutch.co.uk/software-developers/bristol",
-        // Canada
-        "https://clutch.co/ca/software-developers/toronto",
-        "https://clutch.co/ca/software-developers/vancouver",
-        "https://clutch.co/ca/software-developers/montreal",
-        "https://clutch.co/ca/software-developers/ottawa",
-        "https://clutch.co/ca/software-developers/calgary",
-        // Australia
-        "https://clutch.co.au/software-developers/sydney",
-        "https://clutch.co.au/software-developers/melbourne",
-        "https://clutch.co.au/software-developers/brisbane",
-        "https://clutch.co.au/software-developers/perth",
-        "https://clutch.co.au/software-developers/adelaide",
-      ],
-      goodfirms: [
-        // India
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/ahmedabad",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/bangalore",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/hyderabad",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/chennai",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/pune",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/mumbai",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/delhi",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/kolkata",
-        // US
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/san-francisco",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/new-york",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/austin",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/seattle",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/los-angeles",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/boston",
-        // UK
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/london",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/manchester",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/birmingham",
-        // Canada
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/toronto",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/vancouver",
-        // Australia
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/sydney",
-        "https://www.goodfirms.co/directory/city/top-software-development-companies/melbourne",
-      ],
+  static getDirectoryUrls(filters = {}) {
+    // Get directories from database
+    const directories = DirectoryRepo.getActive(filters);
+
+    // Group by platform for backward compatibility
+    const result = {
+      clutch: [],
+      goodfirms: [],
+      other: []
     };
+
+    for (const dir of directories) {
+      if (result[dir.platform]) {
+        result[dir.platform].push(dir.url);
+      } else {
+        result.other.push(dir.url);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Get directory URLs as flat array (for scraping)
+   * @param {Object} filters - Optional filters {platform, country}
+   * @returns {Array} - Array of directory objects with id, name, url, platform
+   */
+  static getDirectories(filters = {}) {
+    return DirectoryRepo.getActive(filters);
+  }
+
+  /**
+   * Update directory scrape stats
+   * @param {number} directoryId - Directory ID
+   * @param {number} companiesFound - Number of companies found
+   */
+  static updateDirectoryStats(directoryId, companiesFound) {
+    DirectoryRepo.updateScrapeStats(directoryId, companiesFound);
   }
 
   /**

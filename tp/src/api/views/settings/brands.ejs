@@ -50,6 +50,7 @@ let content = `
                   <th>ID</th>
                   <th>Name</th>
                   <th>Website</th>
+                  <th>SMTP Status</th>
                   <th>Campaigns</th>
                   <th>Created</th>
                   <th>Actions</th>
@@ -61,26 +62,37 @@ ${brands.map(brand => `
                   <td>${brand.id}</td>
                   <td><strong>${brand.name}</strong></td>
                   <td>${brand.website ? `<a href="${brand.website}" target="_blank">${brand.website}</a>` : '-'}</td>
+                  <td>
+${brand.smtp_is_active && brand.smtp_host ? `
+                    <span class="badge bg-success">
+                      <i class="bi bi-envelope"></i> Active
+                    </span>` : brand.smtp_host ? `
+                    <span class="badge bg-warning">
+                      <i class="bi bi-envelope"></i> Configured
+                    </span>` : `
+                    <span class="badge bg-secondary">
+                      <i class="bi bi-dash-circle"></i> Not Set
+                    </span>`}
+                  </td>
                   <td><span class="badge bg-info">${brand.campaign_count || 0}</span></td>
                   <td>${new Date(brand.created_at).toLocaleDateString()}</td>
                   <td>
-${(brand.campaign_count || 0) === 0 ? `
-                        <form method="POST" action="/settings/brands/${brand.id}/delete"
-                          onsubmit="return confirm('Delete this brand?');"
-                          style="display: inline;">
-                          <button class="btn btn-sm btn-outline-danger">
-                            <i class="bi bi-trash"></i>
-                          </button>
-                        </form>` : `
-                        <button class="btn btn-sm btn-outline-secondary" disabled title="Has campaigns">
-                          <i class="bi bi-trash"></i>
-                        </button>`}
+                    <a href="/settings/brands/${brand.id}/edit" class="btn btn-sm btn-outline-primary">
+                      <i class="bi bi-pencil"></i>
+                    </a>
+                    <form method="POST" action="/settings/brands/${brand.id}/delete"
+                      onsubmit="return confirm('Delete brand \"${brand.name}\"?${(brand.campaign_count || 0) > 0 ? ` This will also delete ${brand.campaign_count} associated campaign(s).` : ''}');"
+                      style="display: inline;">
+                      <button class="btn btn-sm btn-outline-danger" title="${(brand.campaign_count || 0) > 0 ? `Delete with ${brand.campaign_count} campaigns` : 'Delete brand'}">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
                   </td>
                 </tr>`).join('')}
 
 ${brands.length === 0 ? `
                 <tr>
-                  <td colspan="6" class="text-center text-muted py-4">No brands found.</td>
+                  <td colspan="7" class="text-center text-muted py-4">No brands found.</td>
                 </tr>` : ''}
               </tbody>
             </table>
