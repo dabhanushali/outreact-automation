@@ -53,67 +53,72 @@ export class OutreachOrchestrator {
       }
     }
 
-    const keywords = [
-      "software development company",
-      "IT services company",
-      "web development company",
-      "mobile app development company",
-      "software app development",
-      "enterprise software development",
-      "web app development",
-      "IT consulting company",
-      "technology development company",
-      "software development firms",
-    ];
+    // Fetch keywords from database
+    const keywords = db.prepare("SELECT * FROM outreach_keywords").all();
+    console.log(`  Found ${keywords.length} keywords in database.`);
+
+    // Fetch modifiers from database
+    const modifiers = db.prepare("SELECT * FROM search_modifiers").all();
+    console.log(`  Found ${modifiers.length} modifiers in database.`);
 
     let addedToday = 0;
 
-    for (const keyword of keywords) {
+    // Loop through each keyword
+    for (const keywordRow of keywords) {
       // Check daily limit
       if (DailyLimitService.isLimitReached()) {
         console.log(`\n✓ Daily limit reached! Stopping.`);
         break;
       }
 
-      // Match spec: "best software development company in [City Name]"
-      const query = `best ${keyword} in ${city}`;
-      console.log(`\n> Searching: "${query}"`);
-
-      // Get search results (reduced from 100 to avoid CAPTCHA)
-      const results = await GoogleSearch.search(query, 20);
-
-      if (!results || results.length === 0) {
-        console.log(`  No results found.`);
-        continue;
-      }
-
-      console.log(`  Found ${results.length} results. Processing...`);
-
-      // Process each result
-      for (const result of results) {
+      // Loop through each modifier for this keyword
+      for (const modifierRow of modifiers) {
+        // Check daily limit again
         if (DailyLimitService.isLimitReached()) {
-          console.log(`\n✓ Daily limit reached!`);
+          console.log(`\n✓ Daily limit reached! Stopping.`);
           break;
         }
 
-        await this.processProspect(
-          brandId,
-          result.link,
-          result.title,
-          query,
-          campaignId,
-          "google",
-          city
-        );
+        // New pattern: keyword + modifier + city
+        const query = `${keywordRow.phrase} ${modifierRow.modifier} ${city}`;
+        console.log(`\n> Searching: "${query}"`);
 
-        addedToday = DailyLimitService.getTodayStats().prospects_added;
+        // Get search results (reduced from 100 to avoid CAPTCHA)
+        const results = await GoogleSearch.search(query, 20);
 
-        // Small delay between processing
-        await new Promise((r) => setTimeout(r, 2000));
+        if (!results || results.length === 0) {
+          console.log(`  No results found.`);
+          continue;
+        }
+
+        console.log(`  Found ${results.length} results. Processing...`);
+
+        // Process each result
+        for (const result of results) {
+          if (DailyLimitService.isLimitReached()) {
+            console.log(`\n✓ Daily limit reached!`);
+            break;
+          }
+
+          await this.processProspect(
+            brandId,
+            result.link,
+            result.title,
+            query,
+            campaignId,
+            "google",
+            city
+          );
+
+          addedToday = DailyLimitService.getTodayStats().prospects_added;
+
+          // Small delay between processing
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+
+        // Delay between searches (increased to avoid CAPTCHA)
+        await new Promise((r) => setTimeout(r, 15000));
       }
-
-      // Delay between searches (increased to avoid CAPTCHA)
-      await new Promise((r) => setTimeout(r, 15000));
     }
 
     DailyLimitService.printStats();

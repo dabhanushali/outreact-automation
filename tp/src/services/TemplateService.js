@@ -242,6 +242,8 @@ class TemplateService {
         to_email: leadData.to_email,
         subject,
         body,
+        email_category: template.email_category || 'main',
+        sequence_number: template.sequence_number || 0,
       };
     }
 
@@ -293,6 +295,8 @@ class TemplateService {
         to_email: leadData.to_email,
         subject,
         body,
+        email_category: template.email_category || 'main',
+        sequence_number: template.sequence_number || 0,
       };
     }
 

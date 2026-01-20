@@ -238,28 +238,37 @@ class EmailService {
           ).run(queueItem.lead_id);
         }
 
-        // Insert into outreach_logs
-        db.prepare(
+        // Get email category and sequence from template or queue item
+        const emailCategory = queueItem.email_category || queueItem.template_category || 'main';
+        const sequenceNumber = queueItem.sequence_number || queueItem.template_sequence || 0;
+
+        // Insert into outreach_logs with tracking
+        const logResult = db.prepare(
           `
           INSERT INTO outreach_logs (
-            lead_id, blog_lead_id, email_id, blog_email_id, asset_id, status
-          ) VALUES (?, ?, ?, ?, ?, 'SENT')
+            lead_id, blog_lead_id, email_id, blog_email_id, asset_id,
+            email_category, sequence_number, parent_log_id, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'SENT')
           `
         ).run(
           queueItem.lead_id || null,
           queueItem.blog_lead_id || null,
           queueItem.email_id || null,
           queueItem.blog_email_id || null,
-          null  // asset_id can be null - represents general outreach
+          null,  // asset_id can be null - represents general outreach
+          emailCategory,
+          sequenceNumber,
+          queueItem.parent_log_id || null
         );
 
         // Mark queue as sent
         EmailQueueRepo.markAsSent(queueItem.id, result.messageId);
 
         console.log(
-          `  ✓ Sent to ${queueItem.to_email} (Message ID: ${result.messageId})`
+          `  ✓ Sent to ${queueItem.to_email} (${emailCategory} #${sequenceNumber}, Message ID: ${result.messageId})`
         );
-        return { success: true, messageId: result.messageId };
+
+        return { success: true, messageId: result.messageId, logId: logResult.lastInsertRowid };
       } else {
         // Mark as failed
         EmailQueueRepo.markAsFailed(queueItem.id, result.error);

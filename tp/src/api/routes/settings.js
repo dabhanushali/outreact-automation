@@ -2,6 +2,7 @@ import express from "express";
 import { db } from "../../database/db.js";
 import { DailyLimitService } from "../../services/DailyLimitService.js";
 import { BrandRepo } from "../../repositories/BrandRepo.js";
+import FollowUpService from "../../services/FollowUpService.js";
 
 const router = express.Router();
 
@@ -735,6 +736,86 @@ router.post("/settings/cities", (req, res) => {
     res.status(500).render("error", {
       error: "Failed to add city: " + error.message,
       user: req.session,
+    });
+  }
+});
+
+// Follow-up settings
+router.get("/settings/followup", (req, res) => {
+  try {
+    const settings = FollowUpService.getAllSettings();
+    const schedule = FollowUpService.getScheduleConfig();
+
+    res.render("settings/followup", {
+      settings,
+      schedule,
+      user: req.session,
+      req: req, // Pass req for query parameter access
+    });
+  } catch (error) {
+    console.error("Error loading follow-up settings:", error);
+    res.status(500).render("error", {
+      error: "Failed to load follow-up settings",
+      user: req.session,
+    });
+  }
+});
+
+// Update follow-up settings
+router.post("/settings/followup", (req, res) => {
+  try {
+    const {
+      followup_1_interval_days,
+      followup_2_interval_days,
+      followup_3_interval_days,
+      followup_4_interval_days,
+      auto_schedule_followups,
+    } = req.body;
+
+    // Update follow-up intervals
+    const newSchedule = {
+      followup_1: parseInt(followup_1_interval_days),
+      followup_2: parseInt(followup_2_interval_days),
+      followup_3: parseInt(followup_3_interval_days),
+      followup_4: parseInt(followup_4_interval_days),
+    };
+
+    FollowUpService.updateScheduleConfig(newSchedule);
+
+    // Update auto-schedule setting
+    if (auto_schedule_followups !== undefined) {
+      db.prepare(`
+        INSERT OR REPLACE INTO system_settings (key, value, description)
+        VALUES ('auto_schedule_followups', ?, COALESCE((SELECT description FROM system_settings WHERE key = 'auto_schedule_followups'), ''))
+      `).run(auto_schedule_followups === 'true' || auto_schedule_followups === true ? 'true' : 'false');
+    }
+
+    res.redirect("/settings/followup?success=updated");
+  } catch (error) {
+    console.error("Error updating follow-up settings:", error);
+    res.status(500).render("error", {
+      error: "Failed to update follow-up settings: " + error.message,
+      user: req.session,
+    });
+  }
+});
+
+// API: Get follow-up schedule
+router.get("/api/settings/followup", (req, res) => {
+  try {
+    const schedule = FollowUpService.getScheduleConfig();
+    const settings = FollowUpService.getAllSettings();
+
+    res.json({
+      success: true,
+      schedule,
+      settings,
+    });
+  } catch (error) {
+    console.error("Error getting follow-up settings:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
     });
   }
 });

@@ -22,7 +22,9 @@ class EmailQueueRepo {
         b.smtp_user,
         b.smtp_password,
         b.smtp_from_name,
-        b.smtp_from_email
+        b.smtp_from_email,
+        et.email_category as template_category,
+        et.sequence_number as template_sequence
       FROM email_queue eq
       LEFT JOIN leads l ON eq.lead_id = l.id
       LEFT JOIN prospects p ON l.prospect_id = p.id
@@ -30,6 +32,7 @@ class EmailQueueRepo {
       LEFT JOIN blog_prospects bp ON bl.blog_prospect_id = bp.id
       LEFT JOIN campaigns c ON (l.campaign_id = c.id OR bl.campaign_id = c.id)
       LEFT JOIN brands b ON eq.brand_id = b.id
+      LEFT JOIN email_templates et ON eq.template_id = et.id
       WHERE eq.status = 'pending' AND eq.scheduled_for <= datetime('now')
       ORDER BY eq.created_at ASC
       LIMIT ?
@@ -51,8 +54,9 @@ class EmailQueueRepo {
   static addToQueue(data) {
     const stmt = db.prepare(`
       INSERT INTO email_queue (
-        brand_id, lead_id, blog_lead_id, email_id, blog_email_id, template_id, to_email, subject, body, scheduled_for
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(?))
+        brand_id, lead_id, blog_lead_id, email_id, blog_email_id, template_id, to_email, subject, body,
+        email_category, sequence_number, parent_log_id, scheduled_for, scheduled_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(?), datetime(?))
     `);
     return stmt.run(
       data.brand_id || null,
@@ -64,7 +68,11 @@ class EmailQueueRepo {
       data.to_email,
       data.subject,
       data.body,
-      data.scheduled_for || "now"
+      data.email_category || 'main',
+      data.sequence_number || 0,
+      data.parent_log_id || null,
+      data.scheduled_for || "now",
+      data.scheduled_at || "now"
     );
   }
 
