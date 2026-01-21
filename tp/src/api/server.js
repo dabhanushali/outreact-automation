@@ -62,6 +62,12 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Log all requests
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url} - ${req.ip}`);
+  next();
+});
+
 // Session configuration
 app.use(
   session({

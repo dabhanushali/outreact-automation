@@ -137,6 +137,167 @@ router.post("/directories", (req, res) => {
   }
 });
 
+// Import directories from CSV (must come before /:id routes)
+router.post("/directories/import-csv", async (req, res) => {
+  try {
+    console.log("=== DIRECTORY IMPORT START ===");
+    console.log("Request body:", req.body);
+
+    const { csv_url } = req.body;
+
+    if (!csv_url) {
+      return res.status(400).render("error", {
+        error: "CSV URL is required",
+        user: req.session,
+      });
+    }
+
+    console.log(`Importing directories from: ${csv_url}`);
+
+    let targetUrl = csv_url;
+    // Auto-fix Google Sheet edit URLs to export CSV format
+    if (
+      targetUrl.includes("docs.google.com/spreadsheets") &&
+      targetUrl.includes("/edit")
+    ) {
+      targetUrl = targetUrl.replace(/\/edit.*$/, "/export?format=csv");
+      console.log(`Auto-corrected Google Sheet URL to: ${targetUrl}`);
+    }
+
+    // Fetch CSV
+    const response = await fetch(targetUrl);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch sheet: ${response.status} ${response.statusText}`
+      );
+    }
+    const csvText = await response.text();
+
+    // Check for HTML content (common when sheet is not public)
+    if (csvText.includes("<!DOCTYPE html") || csvText.includes("<html")) {
+      return res.status(400).render("error", {
+        error:
+          'Invalid CSV: The link returned a webpage instead of a CSV. Please make sure the Google Sheet is "Published to the Web" (File > Share > Publish to web) or visible to anyone with the link.',
+        user: req.session,
+      });
+    }
+
+    const lines = csvText.split(/\r?\n/).filter((line) => line.trim() !== "");
+    if (lines.length === 0) {
+      return res.redirect("/directories?error=empty_sheet");
+    }
+
+    // Simple CSV parser that handles quoted values
+    function parseCSVLine(line) {
+      const result = [];
+      let current = "";
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const nextChar = line[i + 1];
+
+        if (char === '"') {
+          if (inQuotes && nextChar === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          result.push(current);
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+      result.push(current);
+      return result;
+    }
+
+    // Determine column indices from header
+    const headers = parseCSVLine(lines[0])
+      .map((h) => h.trim().replace(/^"|"$/g, "").toLowerCase());
+
+    // Support flexible column names
+    const nameCol = headers.findIndex(h => ["name", "directory", "directory name", "site", "website"].includes(h));
+    const urlCol = headers.findIndex(h => ["url", "link", "website url", "site url"].includes(h));
+    const platformCol = headers.findIndex(h => ["platform", "type", "source"].includes(h));
+    const categoryCol = headers.findIndex(h => ["category", "categories"].includes(h));
+    const countryCol = headers.findIndex(h => ["country", "countries"].includes(h));
+    const cityCol = headers.findIndex(h => ["city", "cities", "location", "locations"].includes(h));
+
+    console.log(`Import Debug: Headers: [${headers.join(", ")}]`);
+    console.log(`Import Debug: Name col: ${nameCol}, URL col: ${urlCol}, Platform col: ${platformCol}`);
+
+    if (nameCol === -1 || urlCol === -1 || platformCol === -1) {
+      return res.status(400).render("error", {
+        error: `CSV must have Name, URL, and Platform columns. Found: [${headers.join(", ")}]`,
+        user: req.session,
+      });
+    }
+
+    let added = 0;
+    let skipped = 0;
+    const errors = [];
+
+    db.transaction(() => {
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseCSVLine(lines[i]);
+
+        const name = cols[nameCol]?.trim().replace(/^"|"$/g, "");
+        const url = cols[urlCol]?.trim().replace(/^"|"$/g, "");
+        const platform = cols[platformCol]?.trim().replace(/^"|"$/g, "").toLowerCase();
+        const category = categoryCol >= 0 ? cols[categoryCol]?.trim().replace(/^"|"$/g, "") : null;
+        const country = countryCol >= 0 ? cols[countryCol]?.trim().replace(/^"|"$/g, "") : null;
+        const city = cityCol >= 0 ? cols[cityCol]?.trim().replace(/^"|"$/g, "") : null;
+
+        if (!name || !url || !platform) {
+          if (skipped < 5) {
+            console.log(`Import Debug: Skipped row ${i}: missing required fields`);
+          }
+          skipped++;
+          continue;
+        }
+
+        // Validate platform
+        if (!["clutch", "goodfirms", "other"].includes(platform)) {
+          if (errors.length < 5) {
+            errors.push(`Row ${i + 1}: Invalid platform "${platform}"`);
+          }
+          skipped++;
+          continue;
+        }
+
+        try {
+          DirectoryRepo.create({ name, url, platform, category, country, city });
+          added++;
+        } catch (err) {
+          // Skip duplicates or invalid entries
+          skipped++;
+        }
+      }
+    })();
+
+    console.log(`Import Result: Added ${added}, Skipped ${skipped}`);
+
+    if (added === 0) {
+      return res.status(400).render("error", {
+        error: "No valid directories were imported. Please check the CSV format.",
+        user: req.session,
+      });
+    }
+
+    res.redirect(`/directories?success=imported_${added}`);
+  } catch (error) {
+    console.error("Error importing directories:", error);
+    res.status(500).render("error", {
+      error: "Failed to import directories: " + error.message,
+      user: req.session,
+    });
+  }
+});
+
 // Update directory
 router.post("/directories/:id", (req, res) => {
   try {
@@ -251,137 +412,6 @@ router.post("/directories/bulk-delete", (req, res) => {
   } catch (error) {
     console.error("Error bulk deleting directories:", error);
     res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Import directories from CSV
-router.post("/directories/import-csv", async (req, res) => {
-  try {
-    const { csv_url } = req.body;
-
-    if (!csv_url) {
-      return res.status(400).render("error", {
-        error: "CSV URL is required",
-        user: req.session,
-      });
-    }
-
-    console.log(`Importing directories from: ${csv_url}`);
-
-    let targetUrl = csv_url;
-    // Auto-fix Google Sheet edit URLs to export CSV format
-    if (
-      targetUrl.includes("docs.google.com/spreadsheets") &&
-      targetUrl.includes("/edit")
-    ) {
-      targetUrl = targetUrl.replace(/\/edit.*$/, "/export?format=csv");
-      console.log(`Auto-corrected Google Sheet URL to: ${targetUrl}`);
-    }
-
-    // Fetch CSV
-    const response = await fetch(targetUrl);
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch sheet: ${response.status} ${response.statusText}`
-      );
-    }
-    const csvText = await response.text();
-
-    // Check for HTML content (common when sheet is not public)
-    if (csvText.includes("<!DOCTYPE html") || csvText.includes("<html")) {
-      return res.status(400).render("error", {
-        error:
-          'Invalid CSV: The link returned a webpage instead of a CSV. Please make sure the Google Sheet is "Published to the Web" (File > Share > Publish to web) or visible to anyone with the link.',
-        user: req.session,
-      });
-    }
-
-    const lines = csvText.split(/\r?\n/).filter((line) => line.trim() !== "");
-    if (lines.length === 0) {
-      return res.redirect("/directories?error=empty_sheet");
-    }
-
-    // Determine column indices from header
-    const headers = lines[0]
-      .split(",")
-      .map((h) => h.trim().replace(/^"|"$/g, "").toLowerCase());
-
-    let nameCol = headers.indexOf("name");
-    let urlCol = headers.indexOf("url");
-    let platformCol = headers.indexOf("platform");
-    let categoryCol = headers.indexOf("category");
-    let countryCol = headers.indexOf("country");
-    let cityCol = headers.indexOf("city");
-
-    console.log(`Import Debug: Headers: [${headers.join(", ")}]`);
-
-    if (nameCol === -1 || urlCol === -1 || platformCol === -1) {
-      return res.status(400).render("error", {
-        error: "CSV must have at least Name, URL, and Platform columns",
-        user: req.session,
-      });
-    }
-
-    let added = 0;
-    let skipped = 0;
-    const errors = [];
-
-    db.transaction(() => {
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i]
-          .split(",")
-          .map((c) => c.trim().replace(/^"|"$/g, ""));
-
-        const name = cols[nameCol];
-        const url = cols[urlCol];
-        const platform = cols[platformCol]?.toLowerCase().trim();
-        const category = categoryCol >= 0 ? cols[categoryCol] : null;
-        const country = countryCol >= 0 ? cols[countryCol] : null;
-        const city = cityCol >= 0 ? cols[cityCol] : null;
-
-        if (!name || !url || !platform) {
-          if (skipped < 5) {
-            console.log(`Import Debug: Skipped row ${i}: missing required fields`);
-          }
-          skipped++;
-          continue;
-        }
-
-        // Validate platform
-        if (!["clutch", "goodfirms", "other"].includes(platform)) {
-          if (errors.length < 5) {
-            errors.push(`Row ${i + 1}: Invalid platform "${platform}"`);
-          }
-          skipped++;
-          continue;
-        }
-
-        try {
-          DirectoryRepo.create({ name, url, platform, category, country, city });
-          added++;
-        } catch (err) {
-          // Skip duplicates or invalid entries
-          skipped++;
-        }
-      }
-    })();
-
-    console.log(`Import Result: Added ${added}, Skipped ${skipped}`);
-
-    if (added === 0) {
-      return res.status(400).render("error", {
-        error: "No valid directories were imported. Please check the CSV format.",
-        user: req.session,
-      });
-    }
-
-    res.redirect(`/directories?success=imported_${added}`);
-  } catch (error) {
-    console.error("Error importing directories:", error);
-    res.status(500).render("error", {
-      error: "Failed to import directories: " + error.message,
-      user: req.session,
-    });
   }
 });
 

@@ -351,19 +351,62 @@ router.post("/settings/keywords/import-csv", async (req, res) => {
       return res.redirect("/settings/keywords?error=empty_sheet");
     }
 
+    // Simple CSV parser that handles quoted values
+    function parseCSVLine(line) {
+      const result = [];
+      let current = "";
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const nextChar = line[i + 1];
+
+        if (char === '"') {
+          if (inQuotes && nextChar === '"') {
+            // Escaped quote
+            current += '"';
+            i++;
+          } else {
+            // Toggle quote mode
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          // Field separator
+          result.push(current);
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+      result.push(current);
+      return result;
+    }
+
     // Determine column index from header
-    const headers = lines[0]
-      .split(",")
+    const headers = parseCSVLine(lines[0])
       .map((h) => h.trim().replace(/^"|"$/g, "").toLowerCase());
 
-    let keywordCol = headers.indexOf("keyword");
-    if (keywordCol === -1) keywordCol = headers.indexOf("phrase");
+    // Support multiple common column names
+    const possibleColumns = ["keyword", "keywords", "phrase", "phrases", "search term", "search terms", "query", "queries", "term"];
+
+    let keywordCol = -1;
+    for (const col of possibleColumns) {
+      keywordCol = headers.indexOf(col);
+      if (keywordCol !== -1) break;
+    }
+
+    // If still not found, use the first column as fallback
+    if (keywordCol === -1 && headers.length > 0) {
+      keywordCol = 0;
+      console.log(`Import Warning: No standard column found, using first column: ${headers[0]}`);
+    }
 
     console.log(`Import Debug: Headers: [${headers.join(", ")}]`);
+    console.log(`Import Debug: Using column index: ${keywordCol}`);
 
     if (keywordCol === -1) {
       return res.status(400).render("error", {
-        error: "CSV must have a 'Keyword' or 'Phrase' column",
+        error: "CSV must have at least one column. Expected columns: Keyword, Phrase, Search Term, or Query",
         user: req.session,
       });
     }
@@ -373,11 +416,9 @@ router.post("/settings/keywords/import-csv", async (req, res) => {
 
     db.transaction(() => {
       for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i]
-          .split(",")
-          .map((c) => c.trim().replace(/^"|"$/g, ""));
+        const cols = parseCSVLine(lines[i]);
 
-        const phrase = cols[keywordCol];
+        const phrase = cols[keywordCol]?.trim().replace(/^"|"$/g, "");
 
         if (!phrase || phrase.length === 0) {
           skipped++;
