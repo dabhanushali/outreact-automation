@@ -21,7 +21,11 @@ router.get("/leads/general", (req, res) => {
         p.domain,
         p.company_name,
         p.city,
-        p.country
+        p.country,
+        -- Get latest outreach status and email category for regular leads
+        (SELECT ol.status FROM outreach_logs ol WHERE ol.email_id = e.id ORDER BY ol.sent_at DESC LIMIT 1) as latest_outreach_status,
+        (SELECT ol.email_category FROM outreach_logs ol WHERE ol.email_id = e.id ORDER BY ol.sent_at DESC LIMIT 1) as latest_email_category,
+        (SELECT ol.sent_at FROM outreach_logs ol WHERE ol.email_id = e.id ORDER BY ol.sent_at DESC LIMIT 1) as latest_email_sent
       FROM emails e
       JOIN prospects p ON e.prospect_id = p.id
       WHERE 1=1
@@ -93,7 +97,11 @@ router.get("/leads", (req, res) => {
         c.name as campaign_name,
         b.name as brand_name,
         be.email,
-        be.id as email_id
+        be.id as email_id,
+        -- Get latest outreach status and email category
+        (SELECT ol.status FROM outreach_logs ol WHERE ol.blog_lead_id = bl.id ORDER BY ol.sent_at DESC LIMIT 1) as latest_outreach_status,
+        (SELECT ol.email_category FROM outreach_logs ol WHERE ol.blog_lead_id = bl.id ORDER BY ol.sent_at DESC LIMIT 1) as latest_email_category,
+        (SELECT ol.sent_at FROM outreach_logs ol WHERE ol.blog_lead_id = bl.id ORDER BY ol.sent_at DESC LIMIT 1) as latest_email_sent
       FROM blog_leads bl
       LEFT JOIN blog_prospects bp ON bl.blog_prospect_id = bp.id
       LEFT JOIN campaigns c ON bl.campaign_id = c.id
