@@ -22,12 +22,20 @@ router.get("/leads/general", (req, res) => {
         p.company_name,
         p.city,
         p.country,
+        -- Lead information
+        l.id as lead_id,
+        l.status as lead_status,
+        l.found_at as lead_found_at,
+        c.id as campaign_id,
+        c.name as campaign_name,
         -- Get latest outreach status and email category for regular leads
         (SELECT ol.status FROM outreach_logs ol WHERE ol.email_id = e.id ORDER BY ol.sent_at DESC LIMIT 1) as latest_outreach_status,
         (SELECT ol.email_category FROM outreach_logs ol WHERE ol.email_id = e.id ORDER BY ol.sent_at DESC LIMIT 1) as latest_email_category,
         (SELECT ol.sent_at FROM outreach_logs ol WHERE ol.email_id = e.id ORDER BY ol.sent_at DESC LIMIT 1) as latest_email_sent
       FROM emails e
       JOIN prospects p ON e.prospect_id = p.id
+      LEFT JOIN leads l ON l.prospect_id = p.id
+      LEFT JOIN campaigns c ON l.campaign_id = c.id
       WHERE 1=1
     `;
     const params = [];
@@ -253,16 +261,24 @@ router.get("/leads/:id", (req, res) => {
   }
 });
 
-// Update lead status
+// Update lead status (works for both blog_leads and leads)
 router.post("/leads/:id/status", (req, res) => {
   try {
     const { status } = req.body;
     const id = req.params.id;
 
-    const stmt = db.prepare("UPDATE blog_leads SET status = ? WHERE id = ?");
-    stmt.run(status, id);
+    // Check if it's a blog_lead or regular lead
+    const blogLead = db.prepare("SELECT id FROM blog_leads WHERE id = ?").get(id);
 
-    res.redirect("/leads");
+    if (blogLead) {
+      const stmt = db.prepare("UPDATE blog_leads SET status = ? WHERE id = ?");
+      stmt.run(status, id);
+    } else {
+      const stmt = db.prepare("UPDATE leads SET status = ? WHERE id = ?");
+      stmt.run(status, id);
+    }
+
+    res.redirect(req.headers.referer || "/leads");
   } catch (error) {
     console.error("Error updating lead status:", error);
     res.status(500).render("error", {

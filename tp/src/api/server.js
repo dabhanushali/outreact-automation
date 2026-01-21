@@ -40,6 +40,15 @@ console.log(
   `Database initialization complete. Brand ID: ${brandId}, Campaign ID: ${campaignId}\n`
 );
 
+// Process follow-ups automatically on server startup
+import FollowUpService from "../services/FollowUpService.js";
+console.log("🔄 Checking for pending follow-ups...");
+FollowUpService.processPendingFollowUps().then(result => {
+  console.log(`✅ Follow-up processing complete on startup\n`);
+}).catch(err => {
+  console.error(`❌ Error processing follow-ups on startup: ${err.message}\n`);
+});
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 

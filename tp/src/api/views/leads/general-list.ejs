@@ -14,10 +14,10 @@ let content = `
       <div class="card">
         <div class="card-body">
           <form method="GET" action="/leads/general" class="row g-3">
-            <div class="col-md-5">
+            <div class="col-md-3">
               <input type="text" name="search" class="form-control" placeholder="Search domain, company, or email..." value="${filters.search || ''}">
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
               <select name="source" class="form-select">
                 <option value="">All Sources</option>
 ${sources.map(s => `
@@ -58,13 +58,14 @@ ${sources.map(s => `
               <thead>
                 <tr>
                   <th><input type="checkbox" onchange="toggleAll(this)"></th>
-                  <th>Domain / Company</th>
+                  <th>Domain</th>
+                  <th>Company</th>
                   <th>Email</th>
-                  <th>Info</th>
+                  <th>Campaign</th>
+                  <th>Lead Status</th>
                   <th>Email Status</th>
                   <th>Source</th>
-                  <th>Added</th>
-                  <th>Actions</th>
+                  <th>Found</th>
                 </tr>
               </thead>
               <tbody>
@@ -89,6 +90,10 @@ ${emails.map(e => {
                                  'Follow-up ' + e.latest_email_category.split('_')[1];
                 }
 
+                // Determine lead status color
+                const leadStatuses = ['NEW', 'READY', 'OUTREACH_SENT', 'REPLIED', 'REJECTED'];
+                const leadStatus = e.lead_status || 'NEW';
+
                 return `
                 <tr>
                   <td>
@@ -96,17 +101,21 @@ ${emails.map(e => {
                            data-prospect-id="${e.prospect_id}"
                            data-email="${e.email}">
                   </td>
-                  <td>
-                    <strong><a href="/prospects/${e.prospect_id}">${e.company_name || e.domain}</a></strong><br>
-                    <small class="text-muted"><a href="https://${e.domain}" target="_blank">${e.domain}</a></small>
-                  </td>
+                  <td><a href="https://${e.domain}" target="_blank">${e.domain}</a></td>
+                  <td><a href="/prospects/${e.prospect_id}">${e.company_name || '-'}</a></td>
                   <td>
                     <a href="mailto:${e.email}">${e.email}</a>
                     ${e.is_domain_match ? '<span class="badge bg-success" title="Domain Match">DM</span>' : ''}
                     ${e.is_generic ? '<span class="badge bg-warning text-dark" title="Generic Email">G</span>' : ''}
                   </td>
+                  <td>${e.campaign_name ? `<a href="/campaigns/${e.campaign_id}">${e.campaign_name}</a>` : '-'}</td>
                   <td>
-                    ${e.city ? `<small><i class="bi bi-geo-alt"></i> ${e.city}</small>` : '-'}
+                    ${e.lead_id ?
+                      `<select class="form-select form-select-sm" style="width: auto;" onchange="updateLeadStatus(${e.lead_id}, this.value)">
+${leadStatuses.map(s => `
+                        <option value="${s}" ${leadStatus === s ? 'selected' : ''}>${s}</option>`).join('')}
+                      </select>` :
+                      '<span class="text-muted">-</span>'}
                   </td>
                   <td>
                     ${e.latest_outreach_status ?
@@ -116,16 +125,13 @@ ${emails.map(e => {
                     ${e.latest_email_sent ? `<br><small class="text-muted">${new Date(e.latest_email_sent).toLocaleDateString()}</small>` : ''}
                   </td>
                   <td><span class="badge bg-info">${e.source_page || 'unknown'}</span></td>
-                  <td>${new Date(e.created_at).toLocaleDateString()}</td>
-                  <td>
-                    <a href="/emails/${e.email_id}/edit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
-                  </td>
+                  <td>${e.lead_found_at ? new Date(e.lead_found_at).toLocaleDateString() : new Date(e.created_at).toLocaleDateString()}</td>
                 </tr>`;
               }).join('')}
 
 ${emails.length === 0 ? `
                 <tr>
-                  <td colspan="8" class="text-center text-muted py-4">No emails found matching your filters.</td>
+                  <td colspan="9" class="text-center text-muted py-4">No emails found matching your filters.</td>
                 </tr>` : ''}
               </tbody>
             </table>
@@ -246,7 +252,7 @@ function submitToQueue() {
 
 function startSending() {
   if (!confirm('Start processing the email queue now?')) return;
-  
+
   fetch('/email-outreach/queue/send', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'}
@@ -256,6 +262,14 @@ function startSending() {
     alert(data.message || 'Started sending emails in background');
   })
   .catch(err => alert('Error starting queue: ' + err.message));
+}
+
+function updateLeadStatus(leadId, status) {
+  fetch('/leads/' + leadId + '/status', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'status=' + status
+  }).then(() => location.reload());
 }
 </script>
 `;
