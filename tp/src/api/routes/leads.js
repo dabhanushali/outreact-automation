@@ -6,7 +6,7 @@ const router = express.Router();
 // List all general outreach emails (Master Email Entity List)
 router.get("/leads/general", (req, res) => {
   try {
-    const { search, source } = req.query;
+    const { search, source, campaign, status } = req.query;
 
     let query = `
       SELECT
@@ -51,6 +51,16 @@ router.get("/leads/general", (req, res) => {
       params.push(source);
     }
 
+    if (campaign) {
+      query += " AND l.campaign_id = ?";
+      params.push(campaign);
+    }
+
+    if (status) {
+      query += " AND l.status = ?";
+      params.push(status);
+    }
+
     query += " ORDER BY e.created_at DESC LIMIT 500";
 
     const emails = db.prepare(query).all(...params);
@@ -73,12 +83,15 @@ router.get("/leads/general", (req, res) => {
       .prepare("SELECT id, name FROM campaigns ORDER BY name")
       .all(); // Needed to assign lead context
 
+    const statuses = ["NEW", "READY", "OUTREACH_SENT", "REPLIED", "REJECTED"];
+
     res.render("leads/general-list", {
       emails,
       campaigns,
       sources,
       templates,
-      filters: { search, source },
+      statuses,
+      filters: { search, source, campaign, status },
       user: req.session,
     });
   } catch (error) {

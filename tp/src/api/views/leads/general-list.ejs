@@ -15,7 +15,18 @@ let content = `
         <div class="card-body">
           <form method="GET" action="/leads/general" class="row g-3">
             <div class="col-md-3">
-              <input type="text" name="search" class="form-control" placeholder="Search domain, company, or email..." value="${filters.search || ''}">
+              <select name="campaign" class="form-select">
+                <option value="">All Campaigns</option>
+${campaigns.map(c => `
+                <option value="${c.id}" ${filters.campaign == c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <select name="status" class="form-select">
+                <option value="">All Statuses</option>
+${statuses.map(s => `
+                <option value="${s}" ${filters.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+              </select>
             </div>
             <div class="col-md-3">
               <select name="source" class="form-select">
@@ -25,7 +36,7 @@ ${sources.map(s => `
               </select>
             </div>
             <div class="col-md-3">
-              <button type="submit" class="btn btn-primary w-100">Filter</button>
+              <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
             </div>
           </form>
           <a href="/leads/general" class="btn btn-secondary mt-2">Clear Filters</a>
@@ -98,6 +109,7 @@ ${emails.map(e => {
                 <tr>
                   <td>
                     <input type="checkbox" name="email_ids" value="${e.email_id}"
+                           data-lead-id="${e.lead_id || ''}"
                            data-prospect-id="${e.prospect_id}"
                            data-email="${e.email}">
                   </td>
@@ -153,17 +165,9 @@ ${emails.length === 0 ? `
       <div class="modal-body">
         <form id="queueForm">
           <p>Selected Emails: <span id="queueCount">0</span></p>
-          
-          <div class="alert alert-info">
-            <small>These emails will be added as <strong>New Leads</strong> to the selected campaign if they don't already exist.</small>
-          </div>
 
-          <div class="mb-3">
-            <label class="form-label">Select Campaign to Assign</label>
-            <select name="campaign_id" class="form-select" required>
-              <option value="">Choose a campaign...</option>
-              ${campaigns.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
-            </select>
+          <div class="alert alert-info">
+            <small>Emails will be queued using their <strong>existing campaigns</strong>. If a lead doesn't exist, it will be created automatically.</small>
           </div>
 
           <div class="mb-3">
@@ -202,42 +206,62 @@ function showAddToQueueModal() {
 
 function submitToQueue() {
   const selected = document.querySelectorAll('input[name="email_ids"]:checked');
-  const items = [];
-  
-  selected.forEach(cb => {
-    items.push({
-      email_id: cb.value,
-      prospect_id: cb.dataset.prospectId
-    });
-  });
-  
-  const campaignId = document.querySelector('#queueForm select[name="campaign_id"]').value;
-  const templateId = document.querySelector('#queueForm select[name="template_id"]').value;
-  
-  if (!campaignId || !templateId) {
-    alert('Please select a campaign and a template');
+
+  if (selected.length === 0) {
+    alert('Please select at least one email');
     return;
   }
-  
+
+  const templateId = document.querySelector('#queueForm select[name="template_id"]').value;
+
+  if (!templateId) {
+    alert('Please select a template');
+    return;
+  }
+
   const btn = document.querySelector('#addToQueueModal .btn-primary');
   const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Processing...';
-  
-  // Use new special route for general leads
-  fetch('/email-outreach/queue/general-bulk', {
+
+  // Collect lead IDs and email IDs
+  const leadIds = [];
+  const emailIds = [];
+  const itemsToCreate = []; // For prospects without leads
+
+  selected.forEach(cb => {
+    const leadId = cb.dataset.leadId;
+    const emailId = cb.value;
+    const prospectId = cb.dataset.prospectId;
+
+    if (leadId) {
+      // Lead already exists
+      leadIds.push(leadId);
+      emailIds.push(emailId);
+    } else {
+      // Need to create lead first
+      itemsToCreate.push({
+        email_id: emailId,
+        prospect_id: prospectId
+      });
+    }
+  });
+
+  // Use new route that handles existing leads
+  fetch('/email-outreach/queue/general-leads', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
-      items: items,
-      campaign_id: campaignId,
+      lead_ids: leadIds,
+      email_ids: emailIds,
+      items_to_create: itemsToCreate,
       template_id: templateId
     })
   })
   .then(res => res.json())
   .then(data => {
     if (data.success) {
-      alert('Successfully processed:\\nleads created/found: ' + data.leadsProcessed + '\\nEmails Queued: ' + data.queued + '\\nFailures: ' + data.failed);
+      alert('Successfully processed:\\nLeads queued: ' + data.queued + '\\nFailed: ' + data.failed);
       location.reload();
     } else {
       alert('Error: ' + data.error);

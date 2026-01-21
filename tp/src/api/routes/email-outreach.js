@@ -279,6 +279,85 @@ router.post("/email-outreach/queue/general-bulk", (req, res) => {
   }
 });
 
+// Queue for general leads page - uses existing lead campaigns
+router.post("/email-outreach/queue/general-leads", (req, res) => {
+  try {
+    const { lead_ids, email_ids, items_to_create, template_id } = req.body;
+
+    if (!template_id) {
+      return res.status(400).json({ success: false, error: "Template is required" });
+    }
+
+    const allLeadIds = [];
+    const allEmailIds = [];
+    let failed = 0;
+
+    // Process existing leads (use their existing campaigns)
+    if (lead_ids && lead_ids.length > 0) {
+      allLeadIds.push(...lead_ids);
+      allEmailIds.push(...email_ids);
+    }
+
+    // For prospects without leads, skip them (require manual lead creation with campaign)
+    if (items_to_create && items_to_create.length > 0) {
+      console.log(`Skipping ${items_to_create.length} prospects without leads - they need to be assigned to a campaign first`);
+    }
+
+    if (allLeadIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "No valid leads to queue. Selected prospects don't have leads assigned. Please create leads for them first with a campaign."
+      });
+    }
+
+    // Get brand_ids from the leads (may have different brands)
+    const leads = db.prepare(`
+      SELECT DISTINCT l.id, c.brand_id
+      FROM leads l
+      JOIN campaigns c ON l.campaign_id = c.id
+      WHERE l.id IN (${allLeadIds.map(() => '?').join(',')})
+    `).all(...allLeadIds);
+
+    if (leads.length === 0) {
+      return res.status(400).json({ success: false, error: "No valid leads found" });
+    }
+
+    // Group by brand_id since we can only queue one brand at a time
+    const brandGroups = {};
+    leads.forEach(lead => {
+      if (!brandGroups[lead.brand_id]) {
+        brandGroups[lead.brand_id] = [];
+      }
+      brandGroups[lead.brand_id].push(lead.id);
+    });
+
+    // Use the first brand (or handle multiple brands)
+    const brandIds = Object.keys(brandGroups);
+    if (brandIds.length > 1) {
+      return res.status(400).json({
+        success: false,
+        error: `Selected leads belong to ${brandIds.length} different brands. Please select leads from the same brand.`
+      });
+    }
+
+    const brandId = brandIds[0];
+
+    // Queue them
+    const result = EmailQueueService.queueSelectedLeads(allLeadIds, allEmailIds, template_id, brandId);
+
+    res.json({
+      success: true,
+      queued: result.queued,
+      failed: result.failed + failed,
+      errors: result.errors || []
+    });
+
+  } catch (error) {
+    console.error("Error queuing general leads:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Queue campaign leads
 router.post("/email-outreach/queue/campaign", (req, res) => {
   try {

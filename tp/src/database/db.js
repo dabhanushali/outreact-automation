@@ -717,34 +717,10 @@ function populateInitialData() {
   }
   console.log(`  ✓ Processed cities`);
 
-  // 3. Insert Outreach Keywords
-  const keywords = [
-    "software development company",
-    "IT services company",
-    "custom software development",
-    "software app development",
-    "enterprise software development",
-    "mobile app development",
-    "web app development",
-    "IT consulting company",
-    "technology development company",
-    "software development firms",
-  ];
+  // 3. Insert Outreach Keywords - REMOVED (users will add their own)
+  // No default keywords inserted
 
-  const insertKeyword = db.prepare(
-    "INSERT OR IGNORE INTO outreach_keywords (phrase) VALUES (?)"
-  );
-  const keywordIds = {};
-  for (const keyword of keywords) {
-    insertKeyword.run(keyword);
-    const row = db
-      .prepare("SELECT id FROM outreach_keywords WHERE phrase = ?")
-      .get(keyword);
-    if (row) keywordIds[keyword] = row.id;
-  }
-  console.log(`  ✓ Processed keywords`);
-
-  // 4. Insert Search Modifiers (NEW SECTION)
+  // 4. Insert Search Modifiers
   const modifiers = [
     {
       category: "guest_post",
@@ -773,27 +749,7 @@ function populateInitialData() {
   }
   console.log(`  ✓ Processed search modifiers`);
 
-  // 5. Generate Search Queries (Keyword + Location)
-  const insertQuery = db.prepare(
-    "INSERT OR IGNORE INTO search_queries (keyword_id, city_id, query) VALUES (?, ?, ?)"
-  );
-  const insertMany = db.transaction((qs) => {
-    for (const q of qs) {
-      insertQuery.run(q.keywordId, q.cityId, q.query);
-    }
-  });
-
-  const queries = [];
-  for (const [keyword, keywordId] of Object.entries(keywordIds)) {
-    for (const [locationKey, cityId] of Object.entries(cityIds)) {
-      const locationName = locationKey.split("_")[0];
-      const query = `${keyword} ${locationName}`;
-      queries.push({ keywordId, cityId, query });
-    }
-  }
-
-  insertMany(queries);
-  console.log(`  ✓ Generated search queries`);
+  // 5. Generate Search Queries - REMOVED (no default keywords to generate from)
 
   // 6. Insert System Settings
   const defaultSettings = [
@@ -882,61 +838,7 @@ function populateInitialData() {
     }
   }
 
-  // 8. Insert Default Directories
-  const directories = [
-    // Clutch - India
-    { name: "Clutch - Ahmedabad", url: "https://clutch.co/in/developers/ahmedabad", platform: "clutch", country: "India", city: "Ahmedabad", category: "software" },
-    { name: "Clutch - Bangalore", url: "https://clutch.co/in/developers/bangalore", platform: "clutch", country: "India", city: "Bangalore", category: "software" },
-    { name: "Clutch - Hyderabad", url: "https://clutch.co/in/developers/hyderabad", platform: "clutch", country: "India", city: "Hyderabad", category: "software" },
-    { name: "Clutch - Chennai", url: "https://clutch.co/in/developers/chennai", platform: "clutch", country: "India", city: "Chennai", category: "software" },
-    { name: "Clutch - Pune", url: "https://clutch.co/in/developers/pune", platform: "clutch", country: "India", city: "Pune", category: "software" },
-    { name: "Clutch - Mumbai", url: "https://clutch.co/in/developers/mumbai", platform: "clutch", country: "India", city: "Mumbai", category: "software" },
-    { name: "Clutch - Noida", url: "https://clutch.co/in/developers/noida", platform: "clutch", country: "India", city: "Noida", category: "software" },
-    { name: "Clutch - Delhi", url: "https://clutch.co/in/developers/delhi", platform: "clutch", country: "India", city: "Delhi", category: "software" },
-    { name: "Clutch - Kolkata", url: "https://clutch.co/in/developers/kolkata", platform: "clutch", country: "India", city: "Kolkata", category: "software" },
-    { name: "Clutch - Chandigarh", url: "https://clutch.co/in/developers/chandigarh", platform: "clutch", country: "India", city: "Chandigarh", category: "software" },
-    // Clutch - US
-    { name: "Clutch - San Francisco", url: "https://clutch.co/us/software-developers/san-francisco", platform: "clutch", country: "United States", city: "San Francisco", category: "software" },
-    { name: "Clutch - New York", url: "https://clutch.co/us/software-developers/new-york", platform: "clutch", country: "United States", city: "New York", category: "software" },
-    { name: "Clutch - Seattle", url: "https://clutch.co/us/software-developers/seattle", platform: "clutch", country: "United States", city: "Seattle", category: "software" },
-    { name: "Clutch - Austin", url: "https://clutch.co/us/software-developers/austin", platform: "clutch", country: "United States", city: "Austin", category: "software" },
-    { name: "Clutch - Los Angeles", url: "https://clutch.co/us/software-developers/los-angeles", platform: "clutch", country: "United States", city: "Los Angeles", category: "software" },
-    { name: "Clutch - Boston", url: "https://clutch.co/us/software-developers/boston", platform: "clutch", country: "United States", city: "Boston", category: "software" },
-    { name: "Clutch - Chicago", url: "https://clutch.co/us/software-developers/chicago", platform: "clutch", country: "United States", city: "Chicago", category: "software" },
-    { name: "Clutch - Washington DC", url: "https://clutch.co/us/software-developers/washington-dc", platform: "clutch", country: "United States", city: "Washington DC", category: "software" },
-    // Clutch - UK
-    { name: "Clutch - London", url: "https://clutch.co.uk/software-developers/london", platform: "clutch", country: "United Kingdom", city: "London", category: "software" },
-    { name: "Clutch - Manchester", url: "https://clutch.co.uk/software-developers/manchester", platform: "clutch", country: "United Kingdom", city: "Manchester", category: "software" },
-    { name: "Clutch - Birmingham", url: "https://clutch.co.uk/software-developers/birmingham", platform: "clutch", country: "United Kingdom", city: "Birmingham", category: "software" },
-    { name: "Clutch - Edinburgh", url: "https://clutch.co.uk/software-developers/edinburgh", platform: "clutch", country: "United Kingdom", city: "Edinburgh", category: "software" },
-    { name: "Clutch - Leeds", url: "https://clutch.co.uk/software-developers/leeds", platform: "clutch", country: "United Kingdom", city: "Leeds", category: "software" },
-    { name: "Clutch - Bristol", url: "https://clutch.co.uk/software-developers/bristol", platform: "clutch", country: "United Kingdom", city: "Bristol", category: "software" },
-    // Clutch - Canada
-    { name: "Clutch - Toronto", url: "https://clutch.co/ca/software-developers/toronto", platform: "clutch", country: "Canada", city: "Toronto", category: "software" },
-    { name: "Clutch - Vancouver", url: "https://clutch.co/ca/software-developers/vancouver", platform: "clutch", country: "Canada", city: "Vancouver", category: "software" },
-    { name: "Clutch - Montreal", url: "https://clutch.co/ca/software-developers/montreal", platform: "clutch", country: "Canada", city: "Montreal", category: "software" },
-    { name: "Clutch - Ottawa", url: "https://clutch.co/ca/software-developers/ottawa", platform: "clutch", country: "Canada", city: "Ottawa", category: "software" },
-    { name: "Clutch - Calgary", url: "https://clutch.co/ca/software-developers/calgary", platform: "clutch", country: "Canada", city: "Calgary", category: "software" },
-    // Clutch - Australia
-    { name: "Clutch - Sydney", url: "https://clutch.co.au/software-developers/sydney", platform: "clutch", country: "Australia", city: "Sydney", category: "software" },
-    { name: "Clutch - Melbourne", url: "https://clutch.co.au/software-developers/melbourne", platform: "clutch", country: "Australia", city: "Melbourne", category: "software" },
-    { name: "Clutch - Brisbane", url: "https://clutch.co.au/software-developers/brisbane", platform: "clutch", country: "Australia", city: "Brisbane", category: "software" },
-    { name: "Clutch - Perth", url: "https://clutch.co.au/software-developers/perth", platform: "clutch", country: "Australia", city: "Perth", category: "software" },
-    { name: "Clutch - Adelaide", url: "https://clutch.co.au/software-developers/adelaide", platform: "clutch", country: "Australia", city: "Adelaide", category: "software" },
-  ];
-
-  const insertDirectory = db.prepare(
-    "INSERT OR IGNORE INTO directories (name, url, platform, country, city, category) VALUES (?, ?, ?, ?, ?, ?)"
-  );
-  let dirCount = 0;
-  for (const dir of directories) {
-    const result = insertDirectory.run(dir.name, dir.url, dir.platform, dir.country, dir.city, dir.category);
-    if (result.changes > 0) dirCount++;
-  }
-  // Only log if directories were actually created
-  if (dirCount > 0) {
-    console.log(`  ✓ Added ${dirCount} default directories`);
-  }
+  // 8. Insert Default Directories - REMOVED (users will add their own)
 
   // 9. Insert Default Email Templates (Main + 4 Follow-ups) - ONLY if they don't exist
   // Check if templates already exist

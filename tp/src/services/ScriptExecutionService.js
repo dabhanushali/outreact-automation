@@ -3,6 +3,8 @@ import path from 'path';
 import { db } from '../database/db.js';
 
 export class ScriptExecutionService {
+  static runningProcesses = new Map(); // Store process references
+
   static executeScript(mode = 'city', options = {}) {
     return new Promise((resolve, reject) => {
       // Create initial log entry
@@ -35,6 +37,10 @@ export class ScriptExecutionService {
         cwd: path.resolve(),
         stdio: ['ignore', 'pipe', 'pipe']
       });
+
+      // Store process reference with logId
+      this.runningProcesses.set(logId, process);
+      console.log('[ScriptExecutionService] Stored process reference for log:', logId);
 
       let stdout = '';
       let stderr = '';
@@ -76,6 +82,10 @@ export class ScriptExecutionService {
       process.on('close', (code) => {
         clearInterval(progressInterval);
 
+        // Remove from running processes
+        this.runningProcesses.delete(logId);
+        console.log('[ScriptExecutionService] Process closed, removed reference for log:', logId);
+
         const finalStatus = code === 0 ? 'completed' : 'failed';
         const finalMessage = code === 0
           ? `${mode} script completed successfully`
@@ -98,6 +108,10 @@ export class ScriptExecutionService {
 
       process.on('error', (error) => {
         clearInterval(progressInterval);
+
+        // Remove from running processes
+        this.runningProcesses.delete(logId);
+
         db.prepare(`
           UPDATE script_execution_logs
           SET status = 'failed', message = ?, updated_at = CURRENT_TIMESTAMP
@@ -107,6 +121,70 @@ export class ScriptExecutionService {
         reject({ error: error.message, stderr, stdout, logId });
       });
     });
+  }
+
+  /**
+   * Stop a running script by log ID
+   */
+  static stopScript(logId) {
+    const process = this.runningProcesses.get(logId);
+
+    if (!process) {
+      return { success: false, message: 'No running process found for this log' };
+    }
+
+    try {
+      console.log('[ScriptExecutionService] Killing process for log:', logId);
+      process.kill('SIGTERM');
+
+      // Update log status
+      db.prepare(`
+        UPDATE script_execution_logs
+        SET status = 'stopped', message = 'Script stopped by user', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(logId);
+
+      // Remove from running processes
+      this.runningProcesses.delete(logId);
+
+      return { success: true, message: 'Script stopped successfully' };
+    } catch (error) {
+      console.error('[ScriptExecutionService] Error stopping script:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  /**
+   * Stop all running scripts
+   */
+  static stopAllScripts() {
+    let stopped = 0;
+    const errors = [];
+
+    for (const [logId, process] of this.runningProcesses.entries()) {
+      try {
+        process.kill('SIGTERM');
+
+        // Update log status
+        db.prepare(`
+          UPDATE script_execution_logs
+          SET status = 'stopped', message = 'Script stopped by user', updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(logId);
+
+        stopped++;
+      } catch (error) {
+        errors.push({ logId, error: error.message });
+      }
+    }
+
+    this.runningProcesses.clear();
+
+    return {
+      success: true,
+      stopped,
+      errors: errors.length > 0 ? errors : undefined
+    };
   }
 
   static async executeCitySearch(limit = 100) {

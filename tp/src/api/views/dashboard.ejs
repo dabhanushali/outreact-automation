@@ -144,7 +144,12 @@ let content = `
               <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                   <h6 class="mb-0" id="progressScriptType">Location Search</h6>
-                  <span class="badge bg-primary" id="progressStatus">Running</span>
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary" id="progressStatus">Running</span>
+                    <button class="btn btn-sm btn-danger" onclick="stopScript()" title="Stop Script">
+                      <i class="bi bi-stop-circle"></i> Stop
+                    </button>
+                  </div>
                 </div>
                 <div class="progress mb-2" style="height: 25px;">
                   <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
@@ -479,7 +484,8 @@ function updateLogsTable(logs) {
 
   tbody.innerHTML = logs.map(log => {
     const statusClass = log.status === 'running' ? 'primary' :
-                        log.status === 'completed' ? 'success' : 'danger';
+                        log.status === 'completed' ? 'success' :
+                        log.status === 'stopped' ? 'warning' : 'danger';
     const time = new Date(log.created_at).toLocaleString();
 
     return '<tr>' +
@@ -514,6 +520,32 @@ function executeScript(script, params = {}) {
   })
   .catch(error => {
     alert('Failed to start script: ' + error.message);
+  });
+}
+
+function stopScript() {
+  if (!confirm('Stop the running script? This will immediately terminate the process.')) {
+    return;
+  }
+
+  fetch('/api/scripts/stop', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      alert('Script stopped successfully (' + data.stopped + ' process(es) stopped)');
+      // Hide progress display
+      document.getElementById('scriptProgress').style.display = 'none';
+      // Refresh logs after a short delay
+      setTimeout(() => pollScriptProgress(), 1000);
+    } else {
+      throw new Error(data.error || 'Unknown error');
+    }
+  })
+  .catch(error => {
+    alert('Failed to stop script: ' + error.message);
   });
 }
 

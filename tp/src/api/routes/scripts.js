@@ -97,4 +97,17 @@ router.post('/api/scripts/execute', async (req, res) => {
   }
 });
 
+// Stop a running script
+router.post('/api/scripts/stop', (req, res) => {
+  try {
+    const result = ScriptExecutionService.stopAllScripts();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 export default router;

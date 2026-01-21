@@ -5,7 +5,6 @@ import { BlogLeadRepo } from "../repositories/BlogLeadRepo.js";
 import { EmailRepo } from "../repositories/EmailRepo.js";
 import { BlogEmailRepo } from "../repositories/BlogEmailRepo.js";
 import { GoogleSearch } from "./GoogleSearch.js";
-import { SiteVerificationService } from "./SiteVerificationService.js";
 import { EmailExtractionService } from "./EmailExtractionService.js";
 import { DirectoryScraperService } from "./DirectoryScraperService.js";
 import { DailyLimitService } from "./DailyLimitService.js";
@@ -57,11 +56,8 @@ export class OutreachOrchestrator {
     const keywords = db.prepare("SELECT * FROM outreach_keywords").all();
     console.log(`  Found ${keywords.length} keywords in database.`);
 
-    // Fetch modifiers from database
-    const modifiers = db.prepare("SELECT * FROM search_modifiers").all();
-    console.log(`  Found ${modifiers.length} modifiers in database.`);
-
     let addedToday = 0;
+    const seenDomains = new Set(); // Track domains to avoid duplicates in this search
 
     // Loop through each keyword
     for (const keywordRow of keywords) {
@@ -71,54 +67,64 @@ export class OutreachOrchestrator {
         break;
       }
 
-      // Loop through each modifier for this keyword
-      for (const modifierRow of modifiers) {
-        // Check daily limit again
+      // New pattern: keyword + city
+      const query = `${keywordRow.phrase} ${city}`;
+      console.log(`\n> Searching: "${query}"`);
+
+      // Get search results (reduced from 100 to avoid CAPTCHA)
+      const results = await GoogleSearch.search(query, 20);
+
+      if (!results || results.length === 0) {
+        console.log(`  No results found.`);
+        continue;
+      }
+
+      console.log(`  Found ${results.length} results. Processing...`);
+
+      // Process each result
+      for (const result of results) {
         if (DailyLimitService.isLimitReached()) {
-          console.log(`\n✓ Daily limit reached! Stopping.`);
+          console.log(`\n✓ Daily limit reached!`);
           break;
         }
 
-        // New pattern: keyword + modifier + city
-        const query = `${keywordRow.phrase} ${modifierRow.modifier} ${city}`;
-        console.log(`\n> Searching: "${query}"`);
+        // Extract domain to check for duplicates
+        let resultDomain;
+        try {
+          const resultUrl = new URL(result.link);
+          resultDomain = resultUrl.hostname;
+          if (resultDomain.startsWith("www.")) {
+            resultDomain = resultDomain.substring(4);
+          }
+        } catch {
+          continue; // Skip invalid URLs
+        }
 
-        // Get search results (reduced from 100 to avoid CAPTCHA)
-        const results = await GoogleSearch.search(query, 20);
-
-        if (!results || results.length === 0) {
-          console.log(`  No results found.`);
+        // Skip if we've already seen this domain in this search
+        if (seenDomains.has(resultDomain)) {
+          console.log(`  ⊗ SKIP: ${resultDomain} (duplicate in search)`);
           continue;
         }
+        seenDomains.add(resultDomain);
 
-        console.log(`  Found ${results.length} results. Processing...`);
+        await this.processProspect(
+          brandId,
+          result.link,
+          result.title,
+          query,
+          campaignId,
+          "google",
+          city
+        );
 
-        // Process each result
-        for (const result of results) {
-          if (DailyLimitService.isLimitReached()) {
-            console.log(`\n✓ Daily limit reached!`);
-            break;
-          }
+        addedToday = DailyLimitService.getTodayStats().prospects_added;
 
-          await this.processProspect(
-            brandId,
-            result.link,
-            result.title,
-            query,
-            campaignId,
-            "google",
-            city
-          );
-
-          addedToday = DailyLimitService.getTodayStats().prospects_added;
-
-          // Small delay between processing
-          await new Promise((r) => setTimeout(r, 2000));
-        }
-
-        // Delay between searches (increased to avoid CAPTCHA)
-        await new Promise((r) => setTimeout(r, 15000));
+        // Small delay between processing
+        await new Promise((r) => setTimeout(r, 2000));
       }
+
+      // Delay between searches (increased to avoid CAPTCHA)
+      await new Promise((r) => setTimeout(r, 15000));
     }
 
     DailyLimitService.printStats();
@@ -572,6 +578,27 @@ export class OutreachOrchestrator {
       let domain = url.hostname;
       if (domain.startsWith("www.")) domain = domain.substring(4);
 
+      // Skip social media and non-company platforms
+      const excludedDomains = [
+        "google.com",
+        "facebook.com",
+        "twitter.com",
+        "linkedin.com",
+        "instagram.com",
+        "pinterest.com",
+        "youtube.com",
+        "tiktok.com",
+        "wa.me",
+        "whatsapp.com"
+      ];
+
+      for (const excluded of excludedDomains) {
+        if (domain === excluded || domain.endsWith("." + excluded)) {
+          console.log(`  ⊗ SKIP: ${domain} (social media/platform)`);
+          return;
+        }
+      }
+
       // Directory domains that should be scraped for company listings
       const directoryDomains = [
         "clutch.co",
@@ -662,24 +689,12 @@ export class OutreachOrchestrator {
 
       console.log(`  → Processing: ${companyName || domain} (${domain})`);
 
-      // Step 2: Site Verification (Keyword/AI Check)
-      console.log(`    [1/3] Verifying site...`);
-      const verification = await SiteVerificationService.verify(websiteUrl);
-
-      if (!verification.isVerified) {
-        console.log(`    ✗ Verification failed: ${verification.reasoning}`);
-        // Optionally save to prospect_verification table
-        return;
-      }
-
-      console.log(`    ✓ Verified: ${verification.reasoning}`);
-
       // Create prospect
       const prospectId = ProspectRepo.create(
         domain,
         companyName || domain.split(".")[0],
         websiteUrl,
-        city,
+        location,
         country
       );
 
@@ -688,13 +703,25 @@ export class OutreachOrchestrator {
         return;
       }
 
+      // Create lead (connect prospect to campaign)
+      const leadCreated = ProspectRepo.createLead(
+        brandId,
+        campaignId,
+        prospectId,
+        sourceQuery,
+        sourceType
+      );
+
+      if (!leadCreated) {
+        console.log(`    ℹ Lead already exists for this prospect/campaign`);
+      } else {
+        console.log(`    ✓ Lead created (Campaign: ${campaignId})`);
+      }
+
       // Increment daily counter
       DailyLimitService.incrementProspects();
 
       console.log(`    ✓ Prospect added (ID: ${prospectId})`);
-      console.log(
-        `    ℹ Company prospects tracked for reference. Use blog discovery for outreach.`
-      );
     } catch (error) {
       console.error(`  ✗ Error processing ${websiteUrl}: ${error.message}`);
     }
@@ -960,7 +987,6 @@ export class OutreachOrchestrator {
    */
   static async cleanup() {
     await GoogleSearch.close();
-    await SiteVerificationService.close();
     await EmailExtractionService.close();
     await DirectoryScraperService.close();
   }
