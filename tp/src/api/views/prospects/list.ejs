@@ -21,45 +21,54 @@ let content = `
   <!-- Filters -->
   <div class="row mb-4">
     <div class="col-12">
-      <div class="card">
-        <div class="card-body">
-          <form method="GET" action="/prospects" class="row g-3">
-            <div class="col-md-2">
-              <select name="campaign" class="form-select">
-                <option value="">All Campaigns</option>
-                ${campaigns.map(c => `<option value="${c.id}" ${filters.campaign == c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
-              </select>
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center" style="cursor: pointer;" onclick="toggleFilters()">
+          <h6 class="mb-0"><i class="bi bi-funnel me-2"></i>Filters</h6>
+          <i class="bi bi-chevron-down" id="filterToggleIcon"></i>
+        </div>
+        <div class="card-body" id="filtersBody">
+          <form method="GET" action="/prospects">
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label class="form-label small fw-semibold"><i class="bi bi-megaphone me-1"></i>Campaign</label>
+                <select name="campaign" class="form-select form-select-sm">
+                  <option value="">All Campaigns</option>
+                  ${campaigns.map(c => `<option value="${c.id}" ${filters.campaign == c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small fw-semibold"><i class="bi bi-link-45deg me-1"></i>Source</label>
+                <select name="source" class="form-select form-select-sm">
+                  <option value="">All Sources</option>
+                  ${sources.map(s => `<option value="${s}" ${filters.source == s ? 'selected' : ''}>${s}</option>`).join('')}
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small fw-semibold"><i class="bi bi-envelope me-1"></i>Emails</label>
+                <select name="has_email" class="form-select form-select-sm">
+                  <option value="">Has Emails?</option>
+                  <option value="yes" ${filters.has_email === 'yes' ? 'selected' : ''}>Has Emails (>0)</option>
+                  <option value="no" ${filters.has_email === 'no' ? 'selected' : ''}>No Emails (0)</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small fw-semibold"><i class="bi bi-info-circle me-1"></i>Status</label>
+                <select name="status" class="form-select form-select-sm">
+                  <option value="">All Status</option>
+                  <option value="with_emails" ${filters.status === 'with_emails' ? 'selected' : ''}>Extracted</option>
+                  <option value="without_emails" ${filters.status === 'without_emails' ? 'selected' : ''}>Not Extracted</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small fw-semibold"><i class="bi bi-search me-1"></i>Search</label>
+                <input type="text" name="search" class="form-control form-control-sm" placeholder="Search..." value="${filters.search || ''}">
+              </div>
             </div>
-            <div class="col-md-2">
-              <select name="source" class="form-select">
-                <option value="">All Sources</option>
-                ${sources.map(s => `<option value="${s}" ${filters.source == s ? 'selected' : ''}>${s}</option>`).join('')}
-              </select>
-            </div>
-            <div class="col-md-2">
-              <select name="has_email" class="form-select">
-                <option value="">Has Emails?</option>
-                <option value="yes" ${filters.has_email === 'yes' ? 'selected' : ''}>Has Emails (>0)</option>
-                <option value="no" ${filters.has_email === 'no' ? 'selected' : ''}>No Emails (0)</option>
-              </select>
-            </div>
-            <div class="col-md-2">
-              <select name="status" class="form-select">
-                <option value="">All Status</option>
-                <option value="with_emails" ${filters.status === 'with_emails' ? 'selected' : ''}>Extracted</option>
-                <option value="without_emails" ${filters.status === 'without_emails' ? 'selected' : ''}>Not Extracted</option>
-              </select>
-            </div>
-            <div class="col-md-2">
-              <input type="text" name="search" class="form-control" placeholder="Search..." value="${filters.search || ''}">
-            </div>
-            <div class="col-md-2">
-              <button type="submit" class="btn btn-primary w-100">
-                <i class="bi bi-funnel"></i> Filter
-              </button>
-            </div>
-            <div class="col-12">
-              <a href="/prospects" class="btn btn-secondary">Clear Filters</a>
+            <div class="row mt-3">
+              <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-circle"></i> Apply Filters</button>
+                <a href="/prospects" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-circle"></i> Clear All</a>
+              </div>
             </div>
           </form>
         </div>
@@ -143,6 +152,22 @@ content += `
     </div>
   </div>
 </div>
+
+<script>
+function toggleFilters() {
+  const body = document.getElementById('filtersBody');
+  const icon = document.getElementById('filterToggleIcon');
+  if (body.style.display === 'none') {
+    body.style.display = 'block';
+    icon.classList.remove('bi-chevron-down');
+    icon.classList.add('bi-chevron-up');
+  } else {
+    body.style.display = 'none';
+    icon.classList.remove('bi-chevron-up');
+    icon.classList.add('bi-chevron-down');
+  }
+}
+</script>
 `;
 %>
 <%- include('../layout', { title: 'Prospects - Outreach Admin', activePage: 'prospects', content: content, user: user }) %>

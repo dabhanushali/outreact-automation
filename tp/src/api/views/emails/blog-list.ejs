@@ -14,7 +14,7 @@ let content = `
         <a href="/emails" class="btn btn-outline-secondary">
           <i class="bi bi-building"></i> View Company Emails
         </a>
-        <a href="/blog-emails/export${filters.domain_match ? '?domain_match=' + filters.domain_match : ''}${filters.generic ? (filters.domain_match ? '&' : '?') + 'generic=' + filters.generic : ''}${filters.search ? (filters.domain_match || filters.generic ? '&' : '?') + 'search=' + encodeURIComponent(filters.search) : ''}" class="btn btn-success">
+        <a href="/blog-emails/export${filters.campaign ? '?campaign=' + filters.campaign : ''}${filters.domain_match ? (filters.campaign ? '&' : '?') + 'domain_match=' + filters.domain_match : ''}${filters.generic ? (filters.campaign || filters.domain_match ? '&' : '?') + 'generic=' + filters.generic : ''}${filters.search ? (filters.campaign || filters.domain_match || filters.generic ? '&' : '?') + 'search=' + encodeURIComponent(filters.search) : ''}" class="btn btn-success">
           <i class="bi bi-file-earmark-spreadsheet"></i> Export Emails
         </a>
       </div>
@@ -24,29 +24,48 @@ let content = `
   <!-- Filters -->
   <div class="row mb-4">
     <div class="col-12">
-      <div class="card">
-        <div class="card-body">
-          <form method="GET" action="/blog-emails" class="row g-3">
-            <div class="col-md-4">
-              <select name="domain_match" class="form-select">
-                <option value="">All Domain Matches</option>
-                <option value="true" ${filters.domain_match === 'true' ? 'selected' : ''}>Match</option>
-                <option value="false" ${filters.domain_match === 'false' ? 'selected' : ''}>No Match</option>
-              </select>
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center" style="cursor: pointer;" onclick="toggleFilters()">
+          <h6 class="mb-0"><i class="bi bi-funnel me-2"></i>Filters</h6>
+          <i class="bi bi-chevron-down" id="filterToggleIcon"></i>
+        </div>
+        <div class="card-body" id="filtersBody">
+          <form method="GET" action="/blog-emails">
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label class="form-label small fw-semibold"><i class="bi bi-megaphone me-1"></i>Campaign</label>
+                <select name="campaign" class="form-select form-select-sm">
+                  <option value="">All Campaigns</option>
+${campaigns.map(c => `
+                  <option value="${c.id}" ${filters.campaign == c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small fw-semibold"><i class="bi bi-link-45deg me-1"></i>Domain Match</label>
+                <select name="domain_match" class="form-select form-select-sm">
+                  <option value="">All Domain Matches</option>
+                  <option value="true" ${filters.domain_match === 'true' ? 'selected' : ''}>Match</option>
+                  <option value="false" ${filters.domain_match === 'false' ? 'selected' : ''}>No Match</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small fw-semibold"><i class="bi bi-tag me-1"></i>Email Type</label>
+                <select name="generic" class="form-select form-select-sm">
+                  <option value="">All Types</option>
+                  <option value="true" ${filters.generic === 'true' ? 'selected' : ''}>Generic</option>
+                  <option value="false" ${filters.generic === 'false' ? 'selected' : ''}>Specific</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small fw-semibold"><i class="bi bi-search me-1"></i>Search</label>
+                <input type="text" name="search" class="form-control form-control-sm" placeholder="Search email..." value="${filters.search || ''}">
+              </div>
             </div>
-            <div class="col-md-4">
-              <select name="generic" class="form-select">
-                <option value="">All Types</option>
-                <option value="true" ${filters.generic === 'true' ? 'selected' : ''}>Generic</option>
-                <option value="false" ${filters.generic === 'false' ? 'selected' : ''}>Specific</option>
-              </select>
-            </div>
-            <div class="col-md-4">
-              <input type="text" name="search" class="form-control" placeholder="Search email..." value="${filters.search || ''}">
-            </div>
-            <div class="col-12">
-              <button type="submit" class="btn btn-primary">Apply Filters</button>
-              <a href="/blog-emails" class="btn btn-secondary">Clear</a>
+            <div class="row mt-3">
+              <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-circle"></i> Apply Filters</button>
+                <a href="/blog-emails" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-circle"></i> Clear All</a>
+              </div>
             </div>
           </form>
         </div>
@@ -118,6 +137,22 @@ ${emails.length === 0 ? `
     </div>
   </div>
 </div>
+
+<script>
+function toggleFilters() {
+  const body = document.getElementById('filtersBody');
+  const icon = document.getElementById('filterToggleIcon');
+  if (body.style.display === 'none') {
+    body.style.display = 'block';
+    icon.classList.remove('bi-chevron-down');
+    icon.classList.add('bi-chevron-up');
+  } else {
+    body.style.display = 'none';
+    icon.classList.remove('bi-chevron-up');
+    icon.classList.add('bi-chevron-down');
+  }
+}
+</script>
 `;
 %>
 <%- include('../layout', { title: 'Blog Emails - Outreach Admin', activePage: 'emails', content: content, user: user }) %>

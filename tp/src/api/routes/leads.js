@@ -6,7 +6,7 @@ const router = express.Router();
 // List all general outreach emails (Master Email Entity List)
 router.get("/leads/general", (req, res) => {
   try {
-    const { search, source, campaign, status } = req.query;
+    const { search, source, campaign, status, date_from, date_to } = req.query;
 
     let query = `
       SELECT
@@ -61,6 +61,16 @@ router.get("/leads/general", (req, res) => {
       params.push(status);
     }
 
+    if (date_from) {
+      query += " AND DATE(e.created_at) >= ?";
+      params.push(date_from);
+    }
+
+    if (date_to) {
+      query += " AND DATE(e.created_at) <= ?";
+      params.push(date_to);
+    }
+
     query += " ORDER BY e.created_at DESC LIMIT 500";
 
     const emails = db.prepare(query).all(...params);
@@ -73,10 +83,10 @@ router.get("/leads/general", (req, res) => {
       .all()
       .map((s) => s.last_source_type);
 
-    // Get active templates and campaigns for queueing
+    // Get active templates and campaigns for queueing (only general templates)
     const templates = db
       .prepare(
-        "SELECT id, name FROM email_templates WHERE is_active = 1 ORDER BY name"
+        "SELECT id, name FROM email_templates WHERE is_active = 1 AND template_type = 'general' ORDER BY name"
       )
       .all();
     const campaigns = db
@@ -91,7 +101,7 @@ router.get("/leads/general", (req, res) => {
       sources,
       templates,
       statuses,
-      filters: { search, source, campaign, status },
+      filters: { search, source, campaign, status, date_from, date_to },
       user: req.session,
     });
   } catch (error) {
@@ -108,7 +118,7 @@ router.get("/leads/general", (req, res) => {
 // List all leads with filters (now shows blog leads for link exchange/guest posts)
 router.get("/leads", (req, res) => {
   try {
-    const { campaign, status, source } = req.query;
+    const { campaign, status, source, date_from, date_to } = req.query;
 
     let query = `
       SELECT
@@ -147,6 +157,16 @@ router.get("/leads", (req, res) => {
       params.push(source);
     }
 
+    if (date_from) {
+      query += " AND DATE(bl.found_at) >= ?";
+      params.push(date_from);
+    }
+
+    if (date_to) {
+      query += " AND DATE(bl.found_at) <= ?";
+      params.push(date_to);
+    }
+
     query += " ORDER BY bl.found_at DESC LIMIT 500";
 
     const leads = db.prepare(query).all(...params);
@@ -168,10 +188,10 @@ router.get("/leads", (req, res) => {
       .all()
       .map((s) => s.source_type);
 
-    // Get active templates for queueing
+    // Get active templates for queueing (only blog templates)
     const templates = db
       .prepare(
-        "SELECT id, name FROM email_templates WHERE is_active = 1 ORDER BY name"
+        "SELECT id, name FROM email_templates WHERE is_active = 1 AND template_type = 'blog' ORDER BY name"
       )
       .all();
 
@@ -181,7 +201,7 @@ router.get("/leads", (req, res) => {
       statuses,
       sources,
       templates,
-      filters: { campaign, status, source },
+      filters: { campaign, status, source, date_from, date_to },
       user: req.session,
     });
   } catch (error) {

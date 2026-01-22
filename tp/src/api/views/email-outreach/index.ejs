@@ -94,9 +94,10 @@ let content = `
         <div class="card-body">
           ${templates.length === 0 ? `
             <p class="text-muted mb-0">No templates yet. <a href="/email-outreach/templates">Create your first template</a>.</p>
-          ` : templates.slice(0, 5).map(t => `
+          ` : templates.map(t => `
             <div class="d-flex justify-content-between align-items-center mb-2">
               <div>
+                <span class="badge ${t.template_type === 'blog' ? 'bg-success' : 'bg-primary'} me-2">${t.template_type || 'general'}</span>
                 <strong>${t.name}</strong>
                 <br><small class="text-muted">${t.subject}</small>
               </div>

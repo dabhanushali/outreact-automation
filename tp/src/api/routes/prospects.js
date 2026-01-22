@@ -467,7 +467,7 @@ router.post("/prospects/:id/exclude", (req, res) => {
 // Blog prospects
 router.get("/blog-prospects", (req, res) => {
   try {
-    const { search, source } = req.query;
+    const { search, source, campaign, has_email, status } = req.query;
 
     let query = `
       SELECT
@@ -489,13 +489,45 @@ router.get("/blog-prospects", (req, res) => {
       params.push(source);
     }
 
-    query += " GROUP BY bp.id ORDER BY bp.created_at DESC LIMIT 500";
+    // Campaign filter - join with blog_leads
+    if (campaign) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM blog_leads bl
+        WHERE bl.blog_prospect_id = bp.id AND bl.campaign_id = ?
+      )`;
+      params.push(campaign);
+    }
+
+    // Has email filter
+    if (has_email === 'yes') {
+      query += " HAVING email_count > 0";
+    } else if (has_email === 'no') {
+      query += " HAVING email_count = 0";
+    }
+
+    // Status filter (email extraction status)
+    if (status === 'with_emails') {
+      query += " HAVING email_count > 0";
+    } else if (status === 'without_emails') {
+      query += " HAVING email_count = 0";
+    }
+
+    query += " ORDER BY bp.created_at DESC LIMIT 500";
 
     const prospects = db.prepare(query).all(...params);
 
+    // Get campaigns for filter dropdown
+    const campaigns = db.prepare("SELECT id, name FROM campaigns ORDER BY name").all();
+
+    // Get available sources for filter dropdown
+    const sources = db.prepare("SELECT DISTINCT last_source_type FROM blog_prospects WHERE last_source_type IS NOT NULL ORDER BY last_source_type").all().map(s => s.last_source_type);
+
     res.render("prospects/blog-list", {
       prospects,
-      filters: { search, source },
+      campaigns,
+      sources,
+      statuses: ['with_emails', 'without_emails'],
+      filters: { search, source, campaign, has_email, status },
       user: req.session,
     });
   } catch (error) {
@@ -510,13 +542,14 @@ router.get("/blog-prospects", (req, res) => {
 // Export blog prospects to CSV
 router.get("/blog-prospects/export", (req, res) => {
   try {
-    const { search, source } = req.query;
+    const { search, source, campaign, has_email, status } = req.query;
 
     let query = `
       SELECT
         bp.*,
         GROUP_CONCAT(DISTINCT be.email) as all_emails,
-        GROUP_CONCAT(DISTINCT be.source_page) as contact_pages
+        GROUP_CONCAT(DISTINCT be.source_page) as contact_pages,
+        COUNT(DISTINCT be.id) as email_count
       FROM blog_prospects bp
       LEFT JOIN blog_emails be ON bp.id = be.blog_prospect_id
       WHERE 1=1
@@ -531,6 +564,29 @@ router.get("/blog-prospects/export", (req, res) => {
     if (source) {
       query += " AND bp.last_source_type = ?";
       params.push(source);
+    }
+
+    // Campaign filter
+    if (campaign) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM blog_leads bl
+        WHERE bl.blog_prospect_id = bp.id AND bl.campaign_id = ?
+      )`;
+      params.push(campaign);
+    }
+
+    // Has email filter
+    if (has_email === 'yes') {
+      query += " AND be.id IS NOT NULL";
+    } else if (has_email === 'no') {
+      query += " AND be.id IS NULL";
+    }
+
+    // Status filter
+    if (status === 'with_emails') {
+      query += " AND be.id IS NOT NULL";
+    } else if (status === 'without_emails') {
+      query += " AND be.id IS NULL";
     }
 
     query += " GROUP BY bp.id ORDER BY bp.created_at DESC";

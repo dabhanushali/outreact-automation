@@ -53,41 +53,48 @@ let content = `
   <!-- Filters & Actions -->
   <div class="row mb-4">
     <div class="col-12">
-      <div class="card">
-        <div class="card-body">
-          <form method="GET" action="/directories" class="row g-3">
-            <div class="col-md-3">
-              <select name="platform" class="form-select">
-                <option value="">All Platforms</option>
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center" style="cursor: pointer;" onclick="toggleFilters()">
+          <h6 class="mb-0"><i class="bi bi-funnel me-2"></i>Filters</h6>
+          <i class="bi bi-chevron-down" id="filterToggleIcon"></i>
+        </div>
+        <div class="card-body" id="filtersBody">
+          <form method="GET" action="/directories">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label small fw-semibold"><i class="bi bi-diagram-3 me-1"></i>Platform</label>
+                <select name="platform" class="form-select form-select-sm">
+                  <option value="">All Platforms</option>
 ${platforms.map(p => `
-                <option value="${p}" ${filters.platform === p ? 'selected' : ''}>${p.charAt(0).toUpperCase() + p.slice(1)}</option>`).join('')}
-              </select>
-            </div>
-            <div class="col-md-3">
-              <select name="country" class="form-select">
-                <option value="">All Countries</option>
+                  <option value="${p}" ${filters.platform === p ? 'selected' : ''}>${p.charAt(0).toUpperCase() + p.slice(1)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small fw-semibold"><i class="bi bi-geo-alt me-1"></i>Country</label>
+                <select name="country" class="form-select form-select-sm">
+                  <option value="">All Countries</option>
 ${countries.map(c => `
-                <option value="${c}" ${filters.country === c ? 'selected' : ''}>${c}</option>`).join('')}
-              </select>
+                  <option value="${c}" ${filters.country === c ? 'selected' : ''}>${c}</option>`).join('')}
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small fw-semibold"><i class="bi bi-toggle-on me-1"></i>Status</label>
+                <select name="is_active" class="form-select form-select-sm">
+                  <option value="">All Statuses</option>
+                  <option value="true" ${filters.is_active === true ? 'selected' : ''}>Active Only</option>
+                  <option value="false" ${filters.is_active === false ? 'selected' : ''}>Inactive Only</option>
+                </select>
+              </div>
             </div>
-            <div class="col-md-3">
-              <select name="is_active" class="form-select">
-                <option value="">All Statuses</option>
-                <option value="true" ${filters.is_active === true ? 'selected' : ''}>Active Only</option>
-                <option value="false" ${filters.is_active === false ? 'selected' : ''}>Inactive Only</option>
-              </select>
-            </div>
-            <div class="col-md-3">
-              <button type="submit" class="btn btn-primary w-100">Filter</button>
+            <div class="row mt-3">
+              <div class="col-12 d-flex flex-wrap gap-2">
+                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-circle"></i> Apply Filters</button>
+                <a href="/directories" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-circle"></i> Clear All</a>
+                <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addDirectoryModal"><i class="bi bi-plus-circle"></i> Add Directory</button>
+                <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#importCsvModal"><i class="bi bi-file-earmark-spreadsheet"></i> Import CSV</button>
+              </div>
             </div>
           </form>
-          <a href="/directories" class="btn btn-secondary mt-2">Clear Filters</a>
-          <button type="button" class="btn btn-success mt-2" data-bs-toggle="modal" data-bs-target="#addDirectoryModal">
-            <i class="bi bi-plus-circle"></i> Add Directory
-          </button>
-          <button type="button" class="btn btn-outline-primary mt-2" data-bs-toggle="modal" data-bs-target="#importCsvModal">
-            <i class="bi bi-file-earmark-spreadsheet"></i> Import CSV
-          </button>
         </div>
       </div>
     </div>
@@ -328,6 +335,20 @@ document.getElementById('bulkDelete')?.addEventListener('click', async function(
     alert('Failed to delete directories');
   }
 });
+
+function toggleFilters() {
+  const body = document.getElementById('filtersBody');
+  const icon = document.getElementById('filterToggleIcon');
+  if (body.style.display === 'none') {
+    body.style.display = 'block';
+    icon.classList.remove('bi-chevron-down');
+    icon.classList.add('bi-chevron-up');
+  } else {
+    body.style.display = 'none';
+    icon.classList.remove('bi-chevron-up');
+    icon.classList.add('bi-chevron-down');
+  }
+}
 </script>
 `;
 %>

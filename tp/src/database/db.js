@@ -272,6 +272,7 @@ function initSchema() {
         'followup_4'
       )) DEFAULT 'main',
       sequence_number INTEGER DEFAULT 0,
+      template_type TEXT CHECK(template_type IN ('general', 'blog')) DEFAULT 'general',
       is_active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -840,16 +841,17 @@ function populateInitialData() {
 
   // 8. Insert Default Directories - REMOVED (users will add their own)
 
-  // 9. Insert Default Email Templates (Main + 4 Follow-ups) - ONLY if they don't exist
+  // 9. Insert Default Email Templates (5 General + 5 Blog) - ONLY if they don't exist
   // Check if templates already exist
   const existingTemplateCount = db.prepare("SELECT COUNT(*) as count FROM email_templates").get().count;
-  const templatesExist = existingTemplateCount >= 5;
+  const templatesExist = existingTemplateCount >= 10;
 
   if (!templatesExist) {
     console.log("  → Adding default email templates...");
     const emailTemplates = [
       {
-        name: "Main Outreach Email",
+        name: "General - Main Outreach",
+        template_type: "general",
         email_category: "main",
         sequence_number: 0,
         subject: "Partnership Opportunity with {{brand_name}}",
@@ -900,7 +902,8 @@ function populateInitialData() {
       is_active: 1,
     },
     {
-      name: "Follow-up Email 1",
+      name: "General - Follow-up 1",
+      template_type: "general",
       email_category: "followup_1",
       sequence_number: 1,
       subject: "Re: Partnership Opportunity with {{brand_name}}",
@@ -939,7 +942,8 @@ function populateInitialData() {
       is_active: 1,
     },
     {
-      name: "Follow-up Email 2",
+      name: "General - Follow-up 2",
+      template_type: "general",
       email_category: "followup_2",
       sequence_number: 2,
       subject: "Quick question about {{company_name}}",
@@ -972,7 +976,8 @@ function populateInitialData() {
       is_active: 1,
     },
     {
-      name: "Follow-up Email 3",
+      name: "General - Follow-up 3",
+      template_type: "general",
       email_category: "followup_3",
       sequence_number: 3,
       subject: "Still interested?",
@@ -1005,7 +1010,8 @@ function populateInitialData() {
       is_active: 1,
     },
     {
-      name: "Follow-up Email 4 (Final)",
+      name: "General - Follow-up 4 (Final)",
+      template_type: "general",
       email_category: "followup_4",
       sequence_number: 4,
       subject: "One last thought {{first_name}}",
@@ -1044,11 +1050,157 @@ function populateInitialData() {
 </html>`,
       is_active: 1,
     },
+    // Blog Outreach Templates (5 templates)
+    {
+      name: "Blog - Main Outreach",
+      template_type: "blog",
+      email_category: "main",
+      sequence_number: 0,
+      subject: "Guest Post Collaboration: {{blog_name}} × {{brand_name}}",
+      body: `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { border-bottom: 2px solid #28a745; padding-bottom: 10px; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <p>Hi {{first_name}},</p>
+
+    <p>I've been following {{blog_name}} and loved your recent post on {{recent_topic}}. I think our audiences would benefit from collaboration.</p>
+
+    <p>I'd like to contribute a guest post on {{topic_1}}, {{topic_2}}, or {{topic_3}}.</p>
+
+    <p>Would you be open to this? Happy to send an outline first.</p>
+
+    <p>Best regards,<br>{{sender_name}}<br>{{brand_name}}<br>{{sender_email}}</p>
+  </div>
+</body>
+</html>`,
+      is_active: 1,
+    },
+    {
+      name: "Blog - Follow-up 1",
+      template_type: "blog",
+      email_category: "followup_1",
+      sequence_number: 1,
+      subject: "Re: Guest Post Collaboration",
+      body: `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <p>Hi {{first_name}},</p>
+
+    <p>Following up on my guest post proposal for {{blog_name}}. We've contributed to {{similar_blogs}} with great engagement.</p>
+
+    <p>Would you review a brief outline?</p>
+
+    <p>Thanks,<br>{{sender_name}}<br>{{brand_name}}</p>
+  </div>
+</body>
+</html>`,
+      is_active: 1,
+    },
+    {
+      name: "Blog - Follow-up 2",
+      template_type: "blog",
+      email_category: "followup_2",
+      sequence_number: 2,
+      subject: "Quick question about {{blog_name}} content",
+      body: `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <p>Hi {{first_name}},</p>
+
+    <p>Noticed {{blog_name}} covers {{content_focus}}. Our guide on {{related_topic}} got {{performance_metric}} views.</p>
+
+    <p>Want to see a sample?</p>
+
+    <p>Best,<br>{{sender_name}}<br>{{brand_name}}</p>
+  </div>
+</body>
+</html>`,
+      is_active: 1,
+    },
+    {
+      name: "Blog - Follow-up 3",
+      template_type: "blog",
+      email_category: "followup_3",
+      sequence_number: 3,
+      subject: "Content partnership with {{brand_name}}",
+      body: `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <p>Hi {{first_name}},</p>
+
+    <p>About guest posting on {{blog_name}} - we're also open to co-authored posts, expert quotes, or resource contributions.</p>
+
+    <p>What format works best for you?</p>
+
+    <p>Best,<br>{{sender_name}}<br>{{brand_name}}</p>
+  </div>
+</body>
+</html>`,
+      is_active: 1,
+    },
+    {
+      name: "Blog - Follow-up 4 (Final)",
+      template_type: "blog",
+      email_category: "followup_4",
+      sequence_number: 4,
+      subject: "Last thought on content collaboration {{first_name}}",
+      body: `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <p>Hi {{first_name}},</p>
+
+    <p>This will be my last email about content collaboration. Whenever the timing is right, feel free to reach out:</p>
+
+    <p>Email: {{sender_email}}<br>Calendar: {{calendar_link}}</p>
+
+    <p>Keep creating great content!</p>
+
+    <p>Best,<br>{{sender_name}}<br>{{brand_name}}</p>
+  </div>
+</body>
+</html>`,
+      is_active: 1,
+    },
   ];
 
   const insertTemplate = db.prepare(`
-    INSERT OR IGNORE INTO email_templates (name, subject, body, email_category, sequence_number, is_active)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO email_templates (name, subject, body, email_category, sequence_number, template_type, is_active)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
   let templateCount = 0;
@@ -1059,13 +1211,14 @@ function populateInitialData() {
       template.body,
       template.email_category,
       template.sequence_number,
+      template.template_type || 'general',
       template.is_active
     );
     if (result.changes > 0) templateCount++;
   }
 
   if (templateCount > 0) {
-    console.log(`  ✓ Added ${templateCount} default email templates (1 main + 4 follow-ups)`);
+    console.log(`  ✓ Added ${templateCount} default email templates (5 general + 5 blog)`);
   }
   } else {
     console.log(`  ✓ Email templates already exist (${existingTemplateCount} templates)`);

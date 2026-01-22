@@ -11,28 +11,38 @@ let content = `
   <!-- Filters -->
   <div class="row mb-4">
     <div class="col-12">
-      <div class="card">
-        <div class="card-body">
-          <form method="GET" action="/outreach-logs" class="row g-3">
-            <div class="col-md-5">
-              <select name="campaign" class="form-select">
-                <option value="">All Campaigns</option>
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center" style="cursor: pointer;" onclick="toggleFilters()">
+          <h6 class="mb-0"><i class="bi bi-funnel me-2"></i>Filters</h6>
+          <i class="bi bi-chevron-down" id="filterToggleIcon"></i>
+        </div>
+        <div class="card-body" id="filtersBody">
+          <form method="GET" action="/outreach-logs">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold"><i class="bi bi-megaphone me-1"></i>Campaign</label>
+                <select name="campaign" class="form-select form-select-sm">
+                  <option value="">All Campaigns</option>
 ${campaigns.map(c => `
-                <option value="${c.id}" ${filters.campaign == c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
-              </select>
-            </div>
-            <div class="col-md-5">
-              <select name="status" class="form-select">
-                <option value="">All Statuses</option>
+                  <option value="${c.id}" ${filters.campaign == c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold"><i class="bi bi-info-circle me-1"></i>Status</label>
+                <select name="status" class="form-select form-select-sm">
+                  <option value="">All Statuses</option>
 ${statuses.map(s => `
-                <option value="${s}" ${filters.status === s ? 'selected' : ''}>${s}</option>`).join('')}
-              </select>
+                  <option value="${s}" ${filters.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+                </select>
+              </div>
             </div>
-            <div class="col-md-2">
-              <button type="submit" class="btn btn-primary w-100">Filter</button>
+            <div class="row mt-3">
+              <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-circle"></i> Apply Filters</button>
+                <a href="/outreach-logs" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-circle"></i> Clear All</a>
+              </div>
             </div>
           </form>
-          <a href="/outreach-logs" class="btn btn-secondary mt-2">Clear</a>
         </div>
       </div>
     </div>
@@ -88,6 +98,22 @@ ${logs.length === 0 ? `
     </div>
   </div>
 </div>
+
+<script>
+function toggleFilters() {
+  const body = document.getElementById('filtersBody');
+  const icon = document.getElementById('filterToggleIcon');
+  if (body.style.display === 'none') {
+    body.style.display = 'block';
+    icon.classList.remove('bi-chevron-down');
+    icon.classList.add('bi-chevron-up');
+  } else {
+    body.style.display = 'none';
+    icon.classList.remove('bi-chevron-up');
+    icon.classList.add('bi-chevron-down');
+  }
+}
+</script>
 `;
 %>
 <%- include('../layout', { title: 'Outreach Logs - Outreach Admin', activePage: 'leads', content: content, user: user }) %>

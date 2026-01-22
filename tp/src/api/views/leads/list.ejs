@@ -11,35 +11,97 @@ let content = `
   <!-- Filters -->
   <div class="row mb-4">
     <div class="col-12">
-      <div class="card">
-        <div class="card-body">
-          <form method="GET" action="/leads" class="row g-3">
-            <div class="col-md-3">
-              <select name="campaign" class="form-select">
-                <option value="">All Campaigns</option>
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center" style="cursor: pointer;" onclick="toggleFilters()">
+          <div>
+            <h6 class="mb-0"><i class="bi bi-funnel me-2"></i>Filters</h6>
+          </div>
+          <i class="bi bi-chevron-down" id="filterToggleIcon"></i>
+        </div>
+        <div class="card-body" id="filtersBody">
+          <!-- Quick Date Filters -->
+          <div class="mb-4 p-3 bg-light rounded">
+            <label class="form-label fw-bold small text-muted">
+              <i class="bi bi-calendar3 me-1"></i>Quick Date Filters
+            </label>
+            <div class="d-flex flex-wrap gap-2">
+              <button type="button" class="btn btn-sm btn-outline-primary" onclick="setDateFilter('today')">
+                <i class="bi bi-calendar-day"></i> Today
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-primary" onclick="setDateFilter('yesterday')">
+                <i class="bi bi-calendar-minus"></i> Yesterday
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-primary" onclick="setDateFilter('last7days')">
+                Last 7 Days
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-primary" onclick="setDateFilter('last30days')">
+                Last 30 Days
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-primary" onclick="setDateFilter('thismonth')">
+                This Month
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-primary" onclick="setDateFilter('lastmonth')">
+                Last Month
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-warning" onclick="setDateFilter('clear')">
+                <i class="bi bi-x-circle"></i> Clear Dates
+              </button>
+            </div>
+          </div>
+          <form method="GET" action="/leads" id="filterForm">
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label class="form-label small fw-semibold">
+                  <i class="bi bi-megaphone me-1"></i>Campaign
+                </label>
+                <select name="campaign" class="form-select form-select-sm">
+                  <option value="">All Campaigns</option>
 ${campaigns.map(c => `
-                <option value="${c.id}" ${filters.campaign == c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
-              </select>
-            </div>
-            <div class="col-md-3">
-              <select name="status" class="form-select">
-                <option value="">All Statuses</option>
+                  <option value="${c.id}" ${filters.campaign == c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small fw-semibold">
+                  <i class="bi bi-info-circle me-1"></i>Lead Status
+                </label>
+                <select name="status" class="form-select form-select-sm">
+                  <option value="">All Statuses</option>
 ${statuses.map(s => `
-                <option value="${s}" ${filters.status === s ? 'selected' : ''}>${s}</option>`).join('')}
-              </select>
-            </div>
-            <div class="col-md-3">
-              <select name="source" class="form-select">
-                <option value="">All Sources</option>
+                  <option value="${s}" ${filters.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small fw-semibold">
+                  <i class="bi bi-link-45deg me-1"></i>Source
+                </label>
+                <select name="source" class="form-select form-select-sm">
+                  <option value="">All Sources</option>
 ${sources.map(s => `
-                <option value="${s}" ${filters.source === s ? 'selected' : ''}>${s}</option>`).join('')}
-              </select>
+                  <option value="${s}" ${filters.source === s ? 'selected' : ''}>${s}</option>`).join('')}
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small fw-semibold">
+                  <i class="bi bi-calendar-range me-1"></i>Date Range
+                </label>
+                <div class="input-group input-group-sm">
+                  <input type="date" name="date_from" class="form-control" placeholder="From" value="${filters.date_from || ''}" id="date_from">
+                  <span class="input-group-text">to</span>
+                  <input type="date" name="date_to" class="form-control" placeholder="To" value="${filters.date_to || ''}" id="date_to">
+                </div>
+              </div>
             </div>
-            <div class="col-md-3">
-              <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+            <div class="row mt-3">
+              <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">
+                  <i class="bi bi-check-circle"></i> Apply Filters
+                </button>
+                <a href="/leads" class="btn btn-outline-secondary btn-sm">
+                  <i class="bi bi-x-circle"></i> Clear All
+                </a>
+              </div>
             </div>
           </form>
-          <a href="/leads" class="btn btn-secondary mt-2">Clear Filters</a>
         </div>
       </div>
     </div>
@@ -151,24 +213,7 @@ ${leads.length === 0 ? `
   </div>
 </div>
 
-      <div class="col-12">
-        <div class="card">
-          <div class="card-body">
-            <div class="table-responsive">
-              <form id="bulkForm" method="POST" action="/leads/bulk-update">
-                <input type="hidden" name="status" id="bulkStatus">
-                <table class="table table-hover">
-                  <!-- ... table content ... -->
-                </table>
-              </form>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Add to Queue Modal -->
+<!-- Add to Queue Modal -->
   <div class="modal fade" id="addToQueueModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -293,9 +338,23 @@ function updateStatus(leadId, status) {
   }).then(() => location.reload());
 }
 
+function toggleFilters() {
+  const body = document.getElementById('filtersBody');
+  const icon = document.getElementById('filterToggleIcon');
+  if (body.style.display === 'none') {
+    body.style.display = 'block';
+    icon.classList.remove('bi-chevron-down');
+    icon.classList.add('bi-chevron-up');
+  } else {
+    body.style.display = 'none';
+    icon.classList.remove('bi-chevron-up');
+    icon.classList.add('bi-chevron-down');
+  }
+}
+
 function startSending() {
   if (!confirm('Start processing the email queue now?')) return;
-  
+
   fetch('/email-outreach/queue/send', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'}
@@ -305,6 +364,66 @@ function startSending() {
     alert(data.message || 'Started sending emails in background');
   })
   .catch(err => alert('Error starting queue: ' + err.message));
+}
+
+// Quick Date Filter Functions
+function setDateFilter(filter) {
+  const dateFrom = document.getElementById('date_from');
+  const dateTo = document.getElementById('date_to');
+  const today = new Date();
+
+  // Clear existing dates
+  dateFrom.value = '';
+  dateTo.value = '';
+
+  switch(filter) {
+    case 'today':
+      dateFrom.value = formatDate(today);
+      dateTo.value = formatDate(today);
+      break;
+    case 'yesterday':
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      dateFrom.value = formatDate(yesterday);
+      dateTo.value = formatDate(yesterday);
+      break;
+    case 'last7days':
+      const sevenDaysAgo = new Date(today);
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      dateFrom.value = formatDate(sevenDaysAgo);
+      dateTo.value = formatDate(today);
+      break;
+    case 'last30days':
+      const thirtyDaysAgo = new Date(today);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      dateFrom.value = formatDate(thirtyDaysAgo);
+      dateTo.value = formatDate(today);
+      break;
+    case 'thismonth':
+      const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      dateFrom.value = formatDate(firstOfMonth);
+      dateTo.value = formatDate(today);
+      break;
+    case 'lastmonth':
+      const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+      dateFrom.value = formatDate(lastMonth);
+      dateTo.value = formatDate(lastMonthEnd);
+      break;
+    case 'clear':
+      // Dates already cleared
+      break;
+  }
+
+  // Submit the form
+  document.getElementById('filterForm').submit();
+}
+
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
 }
 </script>
 `;

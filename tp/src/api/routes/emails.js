@@ -68,7 +68,7 @@ router.get("/emails", (req, res) => {
 // List all blog emails
 router.get("/blog-emails", (req, res) => {
   try {
-    const { search, domain_match, generic } = req.query;
+    const { search, domain_match, generic, campaign } = req.query;
 
     let query = `
       SELECT
@@ -96,13 +96,26 @@ router.get("/blog-emails", (req, res) => {
       params.push(`%${search}%`);
     }
 
+    // Campaign filter - join with blog_leads
+    if (campaign) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM blog_leads bl
+        WHERE bl.blog_prospect_id = bp.id AND bl.blog_email_id = be.id AND bl.campaign_id = ?
+      )`;
+      params.push(campaign);
+    }
+
     query += " ORDER BY be.created_at DESC LIMIT 500";
 
     const emails = db.prepare(query).all(...params);
 
+    // Get campaigns for filter dropdown
+    const campaigns = db.prepare("SELECT id, name FROM campaigns ORDER BY name").all();
+
     res.render("emails/blog-list", {
       emails,
-      filters: { search, domain_match, generic },
+      campaigns,
+      filters: { search, domain_match, generic, campaign },
       user: req.session,
     });
   } catch (error) {
@@ -184,7 +197,7 @@ router.get("/emails/export", (req, res) => {
 // Export blog emails to CSV (must come before :id route)
 router.get("/blog-emails/export", (req, res) => {
   try {
-    const { search, domain_match, generic } = req.query;
+    const { search, domain_match, generic, campaign } = req.query;
 
     let query = `
       SELECT
@@ -208,6 +221,15 @@ router.get("/blog-emails/export", (req, res) => {
     if (search) {
       query += " AND be.email LIKE ?";
       params.push(`%${search}%`);
+    }
+
+    // Campaign filter - join with blog_leads
+    if (campaign) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM blog_leads bl
+        WHERE bl.blog_prospect_id = bp.id AND bl.blog_email_id = be.id AND bl.campaign_id = ?
+      )`;
+      params.push(campaign);
     }
 
     query += " ORDER BY be.email ASC";
