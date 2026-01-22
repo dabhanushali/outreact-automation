@@ -12,7 +12,7 @@ router.get("/directories", (req, res) => {
     const filters = {};
     if (platform) filters.platform = platform;
     if (country) filters.country = country;
-    if (is_active !== undefined) filters.is_active = is_active === "true" || is_active === "1";
+    if (is_active !== undefined && is_active !== "") filters.is_active = is_active === "true" || is_active === "1";
 
     const directories = DirectoryRepo.getAll(filters);
     const stats = DirectoryRepo.getStats();
