@@ -849,354 +849,202 @@ function populateInitialData() {
   if (!templatesExist) {
     console.log("  → Adding default email templates...");
     const emailTemplates = [
+      // ==================== GENERAL OUTREACH TEMPLATES ====================
       {
-        name: "General - Main Outreach",
+        name: "General Outreach - Main Email",
         template_type: "general",
         email_category: "main",
         sequence_number: 0,
-        subject: "Partnership Opportunity with {{brand_name}}",
-        body: `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { border-bottom: 2px solid #007bff; padding-bottom: 10px; margin-bottom: 20px; }
-    .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; }
-    .button { display: inline-block; padding: 12px 24px; background-color: #007bff; color: white; text-decoration: none; border-radius: 4px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h2>{{brand_name}}</h2>
-    </div>
+        subject: "Backlink Partnership",
+        body: `Hi {{name}},
 
-    <p>Hi {{first_name}},</p>
+I am reaching out from {{brand}}, a software development company.
 
-    <p>I hope this email finds you well. I came across {{company_name}} while researching leading software development companies in {{city}}, and I was impressed by your work.</p>
+We would like to partner with you and help each other grow our SEO performance.
 
-    <p>I'm reaching out because I believe there's a potential partnership opportunity between our organizations that could be mutually beneficial.</p>
+We are open to two options:
+<strong>ABC Link Exchange:</strong> We give you a backlink from one of our partner sites, and you give us a link.
+<strong>Guest Post:</strong> We can write a high-quality, SEO and GEO friendly article for your blog.
 
-    <p>At {{brand_name}}, we specialize in {{specialization}} and have successfully helped companies like yours to {{value_proposition}}.</p>
+Are you open to discussing this?
 
-    <p>Would you be open to a brief 15-minute call next week to explore how we might collaborate?</p>
+Best regards,
+Prabir Chaudhary`,
+        is_active: 1,
+      },
+      {
+        name: "General Outreach - 1st Follow-up",
+        template_type: "general",
+        email_category: "followup_1",
+        sequence_number: 1,
+        subject: "Re: Backlink Partnership",
+        body: `Hi {{name}},
 
-    <p>You can book a time that works for you here: {{calendar_link}}</p>
+I am following up on my previous email.
 
-    <p>Looking forward to the possibility of working together.</p>
+We are actively looking for partners to exchange links with.
 
-    <p>Best regards,<br>
-    {{sender_name}}<br>
-    {{sender_title}}<br>
-    {{brand_name}}<br>
-    {{sender_email}}<br>
-    {{website}}</p>
+If you prefer the Guest Post option, our team will handle the writing and research. You get free content for your blog, and we get a link.
 
-    <div class="footer">
-      <p>This email was sent to {{email}}. If you'd like to stop receiving these emails, please reply with "unsubscribe".</p>
-    </div>
-  </div>
-</body>
-</html>`,
-      is_active: 1,
-    },
-    {
-      name: "General - Follow-up 1",
-      template_type: "general",
-      email_category: "followup_1",
-      sequence_number: 1,
-      subject: "Re: Partnership Opportunity with {{brand_name}}",
-      body: `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { border-bottom: 2px solid #007bff; padding-bottom: 10px; margin-bottom: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h2>{{brand_name}}</h2>
-    </div>
+Please let me know if you are interested.
 
-    <p>Hi {{first_name}},</p>
+Best,
+Prabir Chaudhary`,
+        is_active: 1,
+      },
+      {
+        name: "General Outreach - 2nd Follow-up",
+        template_type: "general",
+        email_category: "followup_2",
+        sequence_number: 2,
+        subject: "Re: Backlink Partnership",
+        body: `Hi {{name}},
 
-    <p>I wanted to quickly follow up on my previous email regarding a potential partnership opportunity between {{brand_name}} and {{company_name}}.</p>
+I wanted to ask if you accept guest posts on your website?
 
-    <p>I understand you're busy, but I genuinely believe there's value in exploring how we could work together. Many companies in {{city}} have found our partnership model to be beneficial for {{specific_benefit}}.</p>
+We have a team of writers who create high-quality articles. We can choose a topic that fits your audience.
 
-    <p>Would you have 10 minutes this week for a quick chat? I'm flexible with timing and can work around your schedule.</p>
+In return, we just need one do-follow backlink.
 
-    <p>Let me know what works for you.</p>
+Is this something you would consider?
 
-    <p>Best regards,<br>
-    {{sender_name}}<br>
-    {{brand_name}}<br>
-    {{sender_email}}</p>
-  </div>
-</body>
-</html>`,
-      is_active: 1,
-    },
-    {
-      name: "General - Follow-up 2",
-      template_type: "general",
-      email_category: "followup_2",
-      sequence_number: 2,
-      subject: "Quick question about {{company_name}}",
-      body: `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <p>Hi {{first_name}},</p>
+Thanks,
+Prabir Chaudhary`,
+        is_active: 1,
+      },
+      {
+        name: "General Outreach - 3rd Follow-up",
+        template_type: "general",
+        email_category: "followup_3",
+        sequence_number: 3,
+        subject: "Re: Backlink Partnership",
+        body: `Hi {{name}},
 
-    <p>I've been following {{company_name}}'s work in {{city}} and noticed your recent achievements in the software development space.</p>
+I have not heard back from you yet.
 
-    <p>We've recently helped similar companies achieve {{result_metric}} through our {{service_type}} services, and I thought this might be relevant to your current initiatives.</p>
+We are still interested in a collaboration. Whether it is a link exchange or a guest post, we are flexible.
 
-    <p>Would you be interested in seeing a brief case study or hearing more about what's working for others in your industry?</p>
+Let me know if you have a minute to chat.
 
-    <p>No pressure at all - just thought it might be valuable context.</p>
+Best,
+Prabir Chaudhary`,
+        is_active: 1,
+      },
+      {
+        name: "General Outreach - 4th Follow-up",
+        template_type: "general",
+        email_category: "followup_4",
+        sequence_number: 4,
+        subject: "Re: Backlink Partnership",
+        body: `Hi {{name}},
 
-    <p>Best,<br>
-    {{sender_name}}<br>
-    {{brand_name}}</p>
-  </div>
-</body>
-</html>`,
-      is_active: 1,
-    },
-    {
-      name: "General - Follow-up 3",
-      template_type: "general",
-      email_category: "followup_3",
-      sequence_number: 3,
-      subject: "Still interested?",
-      body: `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <p>Hi {{first_name}},</p>
+I assume you are not interested in a backlink partnership right now.
 
-    <p>I've reached out a couple of times about exploring a potential partnership, but I haven't heard back.</p>
+I will close this request. If you change your mind later, please reply to this email.
 
-    <p>I completely understand if this isn't a priority right now or if you're not interested. However, I wanted to share one quick thing before I close this thread.</p>
+Best,
+Prabir Chaudhary`,
+        is_active: 1,
+      },
 
-    <p>We're currently working with a select group of partners in {{city}} on {{current_initiative}}, and given {{company_name}}'s reputation, I thought you might want to be aware of it.</p>
+      // ==================== BLOG OUTREACH TEMPLATES ====================
+      {
+        name: "Blog Outreach - Main Email",
+        template_type: "blog",
+        email_category: "main",
+        sequence_number: 0,
+        subject: "Inquiry for your blog",
+        body: `Hi {{name}},
 
-    <p>If you're ever interested in future collaborations, feel free to reach out.</p>
+I found your article on {{campaign}} via Google. It is a good resource.
 
-    <p>Wishing you continued success,<br>
-    {{sender_name}}<br>
-    {{brand_name}}</p>
-  </div>
-</body>
-</html>`,
-      is_active: 1,
-    },
-    {
-      name: "General - Follow-up 4 (Final)",
-      template_type: "general",
-      email_category: "followup_4",
-      sequence_number: 4,
-      subject: "One last thought {{first_name}}",
-      body: `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <p>Hi {{first_name}},</p>
+We recently wrote a detailed guide on {{campaign}}.
 
-    <p>I want to respect your time, so this will be my last email on this topic.</p>
+Since these topics are related, I think your readers would find our guide useful.
 
-    <p>Over the past few weeks, I've reached out about a potential partnership between {{brand_name}} and {{company_name}}. While I haven't heard back, I still believe there could be value in connecting.</p>
+Can you add a link to our guide in your article? In exchange, we are open to:
+<strong>ABC Link Exchange:</strong> We give you a backlink from a partner site.
+<strong>Guest Post:</strong> We write a fresh article for your blog.
 
-    <p>I'll leave the ball in your court. If you ever want to explore collaboration opportunities, I'd be happy to chat:</p>
+Let me know what works for you.
 
-    <p>• Email: {{sender_email}}<br>
-    • Calendar: {{calendar_link}}<br>
-    • Website: {{website}}</p>
+Best,
+Prabir Chaudhary`,
+        is_active: 1,
+      },
+      {
+        name: "Blog Outreach - 1st Follow-up",
+        template_type: "blog",
+        email_category: "followup_1",
+        sequence_number: 1,
+        subject: "Re: Question regarding your article",
+        body: `Hi {{name}},
 
-    <p>Regardless, I wish you and {{company_name}} continued success in {{city}}.</p>
+I am just following up.
 
-    <p>Best regards,<br>
-    {{sender_name}}<br>
-    {{brand_name}}</p>
+Linking to our guide on {{campaign}} would add value to your existing article.
 
-    <hr>
-    <p><small>P.S. If you're interested in staying updated on industry insights and partnership opportunities, feel free to subscribe to our newsletter: {{newsletter_link}}</small></p>
-  </div>
-</body>
-</html>`,
-      is_active: 1,
-    },
-    // Blog Outreach Templates (5 templates)
-    {
-      name: "Blog - Main Outreach",
-      template_type: "blog",
-      email_category: "main",
-      sequence_number: 0,
-      subject: "Guest Post Collaboration: {{blog_name}} × {{brand_name}}",
-      body: `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { border-bottom: 2px solid #28a745; padding-bottom: 10px; margin-bottom: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <p>Hi {{first_name}},</p>
+If you do not want to update the old article, we can write a new guest post for you instead.
 
-    <p>I've been following {{blog_name}} and loved your recent post on {{recent_topic}}. I think our audiences would benefit from collaboration.</p>
+Are you open to this?
 
-    <p>I'd like to contribute a guest post on {{topic_1}}, {{topic_2}}, or {{topic_3}}.</p>
+Best,
+Prabir Chaudhary`,
+        is_active: 1,
+      },
+      {
+        name: "Blog Outreach - 2nd Follow-up",
+        template_type: "blog",
+        email_category: "followup_2",
+        sequence_number: 2,
+        subject: "Content idea for your blog",
+        body: `Hi {{name}},
 
-    <p>Would you be open to this? Happy to send an outline first.</p>
+Since I haven't heard back, I assume you might prefer a new article.
 
-    <p>Best regards,<br>{{sender_name}}<br>{{brand_name}}<br>{{sender_email}}</p>
-  </div>
-</body>
-</html>`,
-      is_active: 1,
-    },
-    {
-      name: "Blog - Follow-up 1",
-      template_type: "blog",
-      email_category: "followup_1",
-      sequence_number: 1,
-      subject: "Re: Guest Post Collaboration",
-      body: `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <p>Hi {{first_name}},</p>
+We can write a unique, well-researched SEO and GEO-friendly guest post for your website. This will give you fresh content for free.
 
-    <p>Following up on my guest post proposal for {{blog_name}}. We've contributed to {{similar_blogs}} with great engagement.</p>
+We just ask for a link back to our site in return.
 
-    <p>Would you review a brief outline?</p>
+Does that sound fair?
 
-    <p>Thanks,<br>{{sender_name}}<br>{{brand_name}}</p>
-  </div>
-</body>
-</html>`,
-      is_active: 1,
-    },
-    {
-      name: "Blog - Follow-up 2",
-      template_type: "blog",
-      email_category: "followup_2",
-      sequence_number: 2,
-      subject: "Quick question about {{blog_name}} content",
-      body: `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <p>Hi {{first_name}},</p>
+Best,
+Prabir Chaudhary`,
+        is_active: 1,
+      },
+      {
+        name: "Blog Outreach - 3rd Follow-up",
+        template_type: "blog",
+        email_category: "followup_3",
+        sequence_number: 3,
+        subject: "Any update?",
+        body: `Hi {{name}},
 
-    <p>Noticed {{blog_name}} covers {{content_focus}}. Our guide on {{related_topic}} got {{performance_metric}} views.</p>
+Just checking in one last time.
 
-    <p>Want to see a sample?</p>
+We are looking for high-quality blogs to partner with. Let me know if you are interested in a link swap or guest post.
 
-    <p>Best,<br>{{sender_name}}<br>{{brand_name}}</p>
-  </div>
-</body>
-</html>`,
-      is_active: 1,
-    },
-    {
-      name: "Blog - Follow-up 3",
-      template_type: "blog",
-      email_category: "followup_3",
-      sequence_number: 3,
-      subject: "Content partnership with {{brand_name}}",
-      body: `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <p>Hi {{first_name}},</p>
+Best,
+Prabir Chaudhary`,
+        is_active: 1,
+      },
+      {
+        name: "Blog Outreach - 4th Follow-up",
+        template_type: "blog",
+        email_category: "followup_4",
+        sequence_number: 4,
+        subject: "Closing this request",
+        body: `Hi {{name}},
 
-    <p>About guest posting on {{blog_name}} - we're also open to co-authored posts, expert quotes, or resource contributions.</p>
+I will stop sending emails now.
 
-    <p>What format works best for you?</p>
+If you ever need content or want to discuss a link exchange in the future, feel free to reach out.
 
-    <p>Best,<br>{{sender_name}}<br>{{brand_name}}</p>
-  </div>
-</body>
-</html>`,
-      is_active: 1,
-    },
-    {
-      name: "Blog - Follow-up 4 (Final)",
-      template_type: "blog",
-      email_category: "followup_4",
-      sequence_number: 4,
-      subject: "Last thought on content collaboration {{first_name}}",
-      body: `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <p>Hi {{first_name}},</p>
-
-    <p>This will be my last email about content collaboration. Whenever the timing is right, feel free to reach out:</p>
-
-    <p>Email: {{sender_email}}<br>Calendar: {{calendar_link}}</p>
-
-    <p>Keep creating great content!</p>
-
-    <p>Best,<br>{{sender_name}}<br>{{brand_name}}</p>
-  </div>
-</body>
-</html>`,
-      is_active: 1,
-    },
-  ];
+Best,
+Prabir Chaudhary`,
+        is_active: 1,
+      },
+    ];
 
   const insertTemplate = db.prepare(`
     INSERT OR IGNORE INTO email_templates (name, subject, body, email_category, sequence_number, template_type, is_active)

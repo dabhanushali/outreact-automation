@@ -143,6 +143,9 @@ class TemplateService {
     const variableMap = {
       name:
         variables.name || variables.contact_name || variables.first_name || "",
+      first_name:
+        variables.first_name || variables.name || variables.contact_name || "",
+      sender_name: variables.smtp_from_name || variables.brand_name || variables.brand || "Prabir Chaudhary",
       company: variables.company_name || variables.company || "", // Full name
       company_short: companyShort, // Short name
       domain: companyShort, // Hack: User tends to use {{domain}} as short company name in templates
