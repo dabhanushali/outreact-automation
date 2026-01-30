@@ -120,9 +120,15 @@ class FollowUpService {
           blogEmailId || emailId
         );
 
-        // Add to queue
+        // Add to queue with sender_email from parent log (for consistency)
+        // The parent outreach_log has the sender_email that was used for main email
+        const parentLog = db.prepare(
+          'SELECT sender_email FROM outreach_logs WHERE id = ?'
+        ).get(logId);
+
         const result = EmailQueueRepo.addToQueue({
           brand_id: brandId,
+          sender_email: parentLog?.sender_email || null, // Use same sender as parent
           ...prepared,
           email_category: category,
           sequence_number: template.sequence_number,

@@ -194,6 +194,11 @@ class EmailService {
         queueItem
       );
 
+      // Use sender_email from queue if available (multi-sender feature)
+      // Falls back to brand's default smtp_from_email for backward compatibility
+      const fromEmail = queueItem.sender_email || queueItem.smtp_from_email;
+      const fromName = queueItem.sender_from_name || queueItem.smtp_from_name;
+
       // Prepare brand config from queue item
       const brandConfig = {
         smtp_host: queueItem.smtp_host,
@@ -201,9 +206,11 @@ class EmailService {
         smtp_secure: queueItem.smtp_secure,
         smtp_user: queueItem.smtp_user,
         smtp_password: queueItem.smtp_password,
-        smtp_from_name: queueItem.smtp_from_name,
-        smtp_from_email: queueItem.smtp_from_email,
+        smtp_from_name: fromName,
+        smtp_from_email: fromEmail,
       };
+
+      console.log(`  📧 Using sender: ${fromName} <${fromEmail}>`);
 
       // Send the email using brand SMTP
       const result = await this.sendEmailWithBrand(
@@ -242,13 +249,13 @@ class EmailService {
         const emailCategory = queueItem.email_category || queueItem.template_category || 'main';
         const sequenceNumber = queueItem.sequence_number || queueItem.template_sequence || 0;
 
-        // Insert into outreach_logs with tracking
+        // Insert into outreach_logs with tracking (including sender_email)
         const logResult = db.prepare(
           `
           INSERT INTO outreach_logs (
             lead_id, blog_lead_id, email_id, blog_email_id, asset_id,
-            email_category, sequence_number, parent_log_id, status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'SENT')
+            email_category, sequence_number, parent_log_id, status, sender_email
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'SENT', ?)
           `
         ).run(
           queueItem.lead_id || null,
@@ -258,7 +265,8 @@ class EmailService {
           null,  // asset_id can be null - represents general outreach
           emailCategory,
           sequenceNumber,
-          queueItem.parent_log_id || null
+          queueItem.parent_log_id || null,
+          fromEmail
         );
 
         // Mark queue as sent

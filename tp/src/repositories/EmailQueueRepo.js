@@ -16,13 +16,14 @@ class EmailQueueRepo {
         COALESCE(c.name, 'General Outreach') as campaign_name,
         COALESCE(c.target_url, '') as target_url,
         b.name as brand_name,
-        b.smtp_host,
-        b.smtp_port,
-        b.smtp_secure,
-        b.smtp_user,
-        b.smtp_password,
-        b.smtp_from_name,
-        b.smtp_from_email,
+        -- Use sender-specific SMTP (required)
+        bse.smtp_host,
+        bse.smtp_port,
+        bse.smtp_secure,
+        bse.smtp_user,
+        bse.smtp_password,
+        COALESCE(bse.from_name, b.name) as sender_from_name,
+        eq.sender_email,
         et.email_category as template_category,
         et.sequence_number as template_sequence
       FROM email_queue eq
@@ -32,8 +33,11 @@ class EmailQueueRepo {
       LEFT JOIN blog_prospects bp ON bl.blog_prospect_id = bp.id
       LEFT JOIN campaigns c ON (l.campaign_id = c.id OR bl.campaign_id = c.id)
       LEFT JOIN brands b ON eq.brand_id = b.id
+      LEFT JOIN brand_sender_emails bse ON eq.sender_email = bse.email AND bse.brand_id = b.id
       LEFT JOIN email_templates et ON eq.template_id = et.id
       WHERE eq.status = 'pending' AND eq.scheduled_for <= datetime('now')
+        AND bse.smtp_host IS NOT NULL
+        AND bse.is_active = 1
       ORDER BY eq.created_at ASC
       LIMIT ?
     `
@@ -54,12 +58,13 @@ class EmailQueueRepo {
   static addToQueue(data) {
     const stmt = db.prepare(`
       INSERT INTO email_queue (
-        brand_id, lead_id, blog_lead_id, email_id, blog_email_id, template_id, to_email, subject, body,
+        brand_id, sender_email, lead_id, blog_lead_id, email_id, blog_email_id, template_id, to_email, subject, body,
         email_category, sequence_number, parent_log_id, scheduled_for, scheduled_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(?), datetime(?))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(?), datetime(?))
     `);
     return stmt.run(
       data.brand_id || null,
+      data.sender_email || null,
       data.lead_id || null,
       data.blog_lead_id || null,
       data.email_id || null,

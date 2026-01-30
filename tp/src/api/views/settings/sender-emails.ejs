@@ -1,0 +1,394 @@
+<%
+let content = `
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col-12">
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+          <li class="breadcrumb-item"><a href="/settings/brands">Brands</a></li>
+          <li class="breadcrumb-item active">${brand.name}</li>
+        </ol>
+      </nav>
+      <h1><i class="bi bi-envelope-plus"></i> Sender Emails: ${brand.name}</h1>
+      <p class="text-muted">Manage multiple sender emails with individual SMTP configuration</p>
+    </div>
+  </div>
+
+  <!-- Info Banner -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="alert alert-info" role="alert">
+        <i class="bi bi-info-circle"></i>
+        <strong>Multi-Sender Rotation:</strong> When sending main emails, the system randomly selects one of your active sender emails.
+        Follow-up emails always use the same sender as the main email for consistency.
+        Each sender email must have its own SMTP configuration.
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Alert -->
+  ${error ? `
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="alert alert-danger" role="alert">
+          <i class="bi bi-exclamation-triangle"></i>
+          <strong>Configuration Error:</strong>
+          ${error === 'smtp_host_required' ? 'SMTP Host is required when configuring SMTP settings.' : ''}
+          ${error === 'smtp_user_required' ? 'SMTP User is required when configuring SMTP settings.' : ''}
+          ${error === 'smtp_password_required' ? 'SMTP Password is required when configuring SMTP settings.' : ''}
+          ${error === 'all_smtp_required' ? 'All SMTP fields (Host, User, Password) are required when configuring SMTP.' : ''}
+        </div>
+      </div>
+    </div>
+  ` : ''}
+
+  <!-- Add New Sender Email -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card border-primary">
+        <div class="card-header bg-primary text-white">
+          <i class="bi bi-plus-circle"></i> Add New Sender Email
+        </div>
+        <div class="card-body">
+          <form method="POST" action="/settings/brands/${brand.id}/sender-emails">
+            <div class="row g-3">
+              <div class="col-md-5">
+                <label class="form-label">Email Address *</label>
+                <input type="email" name="email" class="form-control" placeholder="person@company.com" required>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">From Name</label>
+                <input type="text" name="from_name" class="form-control" placeholder="Person Name">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Daily Limit</label>
+                <input type="number" name="daily_limit" class="form-control" value="20" min="1" max="500">
+              </div>
+              <div class="col-md-1 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                  <i class="bi bi-plus-lg"></i> Add
+                </button>
+              </div>
+            </div>
+            <p class="text-muted small mt-2 mb-0">SMTP configuration can be added after adding the email using the Configure (⚙️) button.</p>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sender Emails List -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <i class="bi bi-list-ul"></i> Sender Emails (${senderEmails.length})
+          </div>
+          <a href="/settings/brands" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Back to Brands
+          </a>
+        </div>
+        <div class="card-body">
+          ${senderEmails.length === 0 ? `
+            <div class="text-center text-muted py-5">
+              <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+              <p class="mt-3">No sender emails configured for this brand.</p>
+              <p class="small">Add sender emails above and configure their SMTP settings.</p>
+            </div>
+          ` : `
+            <div class="table-responsive">
+              <table class="table table-hover">
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th>From Name</th>
+                    <th>SMTP Status</th>
+                    <th>Status</th>
+                    <th>Today's Usage</th>
+                    <th>Daily Limit</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+${senderEmails.map(se => `
+                  <tr>
+                    <td>
+                      <a href="mailto:${se.email}" class="text-decoration-none">
+                        <i class="bi bi-envelope"></i> ${se.email}
+                      </a>
+                    </td>
+                    <td>${se.from_name || '<span class="text-muted">-</span>'}</td>
+                    <td>
+                      ${se.smtp_host ? `
+                        <span class="badge bg-success" title="${se.smtp_host}:${se.smtp_port}">
+                          <i class="bi bi-check-circle"></i> Configured
+                        </span>
+                      ` : `
+                        <span class="badge bg-warning text-dark">
+                          <i class="bi bi-exclamation-triangle"></i> Not Configured
+                        </span>
+                      `}
+                    </td>
+                    <td>
+                      <span class="badge bg-${se.is_active ? 'success' : 'secondary'}">
+                        ${se.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td>
+                      <div class="d-flex align-items-center">
+                        <div class="progress flex-grow-1" style="height: 8px;">
+                          <div class="progress-bar ${se.today_sent >= se.daily_limit ? 'bg-danger' : se.today_sent >= se.daily_limit * 0.8 ? 'bg-warning' : 'bg-success'}"
+                               style="width: ${Math.min((se.today_sent / se.daily_limit) * 100, 100)}%">
+                          </div>
+                        </div>
+                        <span class="ms-2 small">${se.today_sent}/${se.daily_limit}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge bg-info">${se.daily_limit}</span>
+                    </td>
+                    <td>
+                      <small class="text-muted">${new Date(se.created_at).toLocaleDateString()}</small>
+                    </td>
+                    <td>
+                      <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-primary" onclick="configureSmtp(${se.id})" title="Configure SMTP">
+                          <i class="bi bi-gear"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-${se.is_active ? 'warning' : 'success'}"
+                                onclick="toggleStatus(${se.id})" title="${se.is_active ? 'Deactivate' : 'Activate'}">
+                          <i class="bi bi-${se.is_active ? 'dash' : 'check2'}"></i>
+                        </button>
+                        <form method="POST" action="/settings/sender-emails/${se.id}/delete" class="d-inline" onsubmit="return confirm('Delete this sender email?');">
+                          <button type="submit" class="btn btn-outline-danger" title="Delete">
+                            <i class="bi bi-trash"></i>
+                          </button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+`).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Configure Modal -->
+<div class="modal fade" id="configModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Configure Sender Email</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="configForm" method="POST" action="">
+          <input type="hidden" name="id" id="configId">
+
+          <h6 class="mb-3"><i class="bi bi-info-circle"></i> Email Information</h6>
+          <div class="mb-3">
+            <label class="form-label">Email Address</label>
+            <input type="email" name="email" id="configEmail" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">From Name</label>
+            <input type="text" name="from_name" id="configFromName" class="form-control">
+          </div>
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Daily Limit</label>
+              <input type="number" name="daily_limit" id="configDailyLimit" class="form-control" min="1" max="500">
+            </div>
+            <div class="col-md-6">
+              <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" name="is_active" id="configIsActive" value="true">
+                <label class="form-check-label" for="configIsActive">
+                  Active
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <hr class="my-4">
+
+          <h6 class="mb-3"><i class="bi bi-gear"></i> SMTP Configuration</h6>
+          <p class="text-muted small mb-3">Each sender email must have its own SMTP configuration to send emails.</p>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">SMTP Host *</label>
+              <input type="text" name="smtp_host" id="configSmtpHost" class="form-control" placeholder="smtp.gmail.com" required>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Port *</label>
+              <input type="number" name="smtp_port" id="configSmtpPort" class="form-control" value="587" required>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Security</label>
+              <select name="smtp_secure" id="configSmtpSecure" class="form-select">
+                <option value="false">STARTTLS (587)</option>
+                <option value="true">SSL/TLS (465)</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">SMTP User *</label>
+              <input type="text" name="smtp_user" id="configSmtpUser" class="form-control" placeholder="person@company.com" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">SMTP Password *</label>
+              <input type="password" name="smtp_password" id="configSmtpPassword" class="form-control" placeholder="App password or SMTP password" required>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-info" onclick="testConnection()">
+          <i class="bi bi-wifi"></i> Test Connection
+        </button>
+        <button type="button" class="btn btn-primary" onclick="submitConfig()">Save Configuration</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Store sender emails data
+const senderEmails = ${JSON.stringify(senderEmails)};
+let currentConfigId = null;
+
+function configureSmtp(id) {
+  const se = senderEmails.find(e => e.id === id);
+  if (!se) return;
+
+  currentConfigId = id;
+
+  document.getElementById('configId').value = se.id;
+  document.getElementById('configEmail').value = se.email;
+  document.getElementById('configFromName').value = se.from_name || '';
+  document.getElementById('configDailyLimit').value = se.daily_limit;
+  document.getElementById('configIsActive').checked = se.is_active === 1;
+
+  // SMTP fields
+  document.getElementById('configSmtpHost').value = se.smtp_host || '';
+  document.getElementById('configSmtpPort').value = se.smtp_port || 587;
+  document.getElementById('configSmtpSecure').value = se.smtp_secure === 1 ? 'true' : 'false';
+  document.getElementById('configSmtpUser').value = se.smtp_user || '';
+  document.getElementById('configSmtpPassword').value = se.smtp_password || '';
+
+  const form = document.getElementById('configForm');
+  form.action = '/settings/sender-emails/' + id + '/update';
+
+  const modal = new bootstrap.Modal(document.getElementById('configModal'));
+  modal.show();
+}
+
+function submitConfig() {
+  document.getElementById('configForm').submit();
+}
+
+async function testConnection() {
+  const smtpHost = document.getElementById('configSmtpHost').value;
+  const smtpPort = document.getElementById('configSmtpPort').value;
+  const smtpSecure = document.getElementById('configSmtpSecure').value;
+  const smtpUser = document.getElementById('configSmtpUser').value;
+  const smtpPassword = document.getElementById('configSmtpPassword').value;
+
+  if (!smtpHost || !smtpUser || !smtpPassword) {
+    alert('Please fill in SMTP Host, User, and Password to test the connection.');
+    return;
+  }
+
+  const btn = event.target;
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Testing...';
+  btn.disabled = true;
+
+  try {
+    // Use URL-encoded form data instead of FormData
+    const params = new URLSearchParams();
+    params.append('smtp_host', smtpHost);
+    params.append('smtp_port', smtpPort);
+    params.append('smtp_secure', smtpSecure);
+    params.append('smtp_user', smtpUser);
+    params.append('smtp_password', smtpPassword);
+
+    const response = await fetch('/settings/sender-emails/' + currentConfigId + '/test', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: params
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      alert('✅ ' + result.message);
+    } else {
+      alert('❌ ' + result.message);
+    }
+  } catch (error) {
+    alert('❌ Error testing connection: ' + error.message);
+  } finally {
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+  }
+}
+
+function toggleStatus(id) {
+  const se = senderEmails.find(e => e.id === id);
+  if (!se) return;
+
+  const newStatus = se.is_active === 1 ? 0 : 1;
+
+  // Use URL-encoded form data instead of FormData
+  const params = new URLSearchParams();
+  params.append('email', se.email);
+  params.append('from_name', se.from_name || '');
+  params.append('daily_limit', se.daily_limit);
+  params.append('is_active', newStatus);
+  params.append('smtp_host', se.smtp_host || '');
+  params.append('smtp_port', se.smtp_port || '');
+  params.append('smtp_secure', se.smtp_secure || 0);
+  params.append('smtp_user', se.smtp_user || '');
+  params.append('smtp_password', se.smtp_password || '');
+
+  fetch('/settings/sender-emails/' + id + '/update', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json'
+    },
+    body: params
+  })
+  .then(async response => {
+    // Check if response is JSON (error) or redirect (success)
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      // JSON response means there was an error
+      const data = await response.json();
+      alert('Error: ' + (data.error || data.message || 'Unknown error'));
+    } else {
+      // Redirect means success
+      location.reload();
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    alert('Error updating status: ' + error.message);
+    location.reload(); // Reload anyway to see current state
+  });
+}
+</script>
+`;
+%>
+<%- include('../layout', { title: 'Sender Emails - Settings', activePage: 'settings', content: content, user: user }) %>

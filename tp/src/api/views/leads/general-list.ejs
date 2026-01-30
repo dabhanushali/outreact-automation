@@ -355,7 +355,24 @@ function updateLeadStatus(leadId, status) {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
     body: 'status=' + status
-  }).then(() => location.reload());
+  })
+  .then(res => {
+    if (res.ok) {
+      return res.json();
+    }
+    throw new Error('Failed to update status');
+  })
+  .then(data => {
+    if (data.success) {
+      location.reload();
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(err => {
+    console.error('Error updating status:', err);
+    alert('Failed to update status. Please try again.');
+  });
 }
 
 function toggleFilters() {

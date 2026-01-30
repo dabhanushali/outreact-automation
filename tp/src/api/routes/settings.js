@@ -3,6 +3,7 @@ import { db } from "../../database/db.js";
 import { DailyLimitService } from "../../services/DailyLimitService.js";
 import { BrandRepo } from "../../repositories/BrandRepo.js";
 import FollowUpService from "../../services/FollowUpService.js";
+import BrandSenderEmailRepo from "../../repositories/BrandSenderEmailRepo.js";
 
 const router = express.Router();
 
@@ -15,6 +16,12 @@ router.get("/settings/brands", (req, res) => {
     brands.forEach((brand) => {
       const count = BrandRepo.getCampaignCount(brand.id);
       brand.campaign_count = count.count;
+
+      // Get active sender emails count
+      const senderCount = db.prepare(
+        "SELECT COUNT(*) as count FROM brand_sender_emails WHERE brand_id = ? AND is_active = 1"
+      ).get(brand.id);
+      brand.sender_emails_count = senderCount?.count || 0;
     });
 
     res.render("settings/brands", { brands, user: req.session });
@@ -77,30 +84,11 @@ router.post("/settings/brands", (req, res) => {
 router.post("/settings/brands/:id", (req, res) => {
   try {
     const id = req.params.id;
-    const {
-      name,
-      website,
-      smtp_host,
-      smtp_port,
-      smtp_secure,
-      smtp_user,
-      smtp_password,
-      smtp_from_name,
-      smtp_from_email,
-      smtp_is_active
-    } = req.body;
+    const { name, website } = req.body;
 
     const brand = BrandRepo.update(id, {
       name,
       website,
-      smtp_host: smtp_host || null,
-      smtp_port: smtp_port ? parseInt(smtp_port) : null,
-      smtp_secure: smtp_secure === "true" || smtp_secure === true || smtp_secure === 1,
-      smtp_user: smtp_user || null,
-      smtp_password: smtp_password || null,
-      smtp_from_name: smtp_from_name || null,
-      smtp_from_email: smtp_from_email || null,
-      smtp_is_active: smtp_is_active === "true" || smtp_is_active === true || smtp_is_active === 1,
     });
 
     res.redirect("/settings/brands");
@@ -857,6 +845,222 @@ router.get("/api/settings/followup", (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message,
+    });
+  }
+});
+
+// ============================================
+// SENDER EMAILS MANAGEMENT
+// ============================================
+
+// View sender emails for a brand
+router.get("/settings/brands/:id/sender-emails", (req, res) => {
+  try {
+    const brand = BrandRepo.getById(req.params.id);
+    if (!brand) {
+      return res.status(404).render("error", {
+        error: "Brand not found",
+        user: req.session,
+      });
+    }
+
+    const senderEmails = BrandSenderEmailRepo.getAllWithStats(brand.id);
+
+    res.render("settings/sender-emails", {
+      brand,
+      senderEmails,
+      error: req.query.error,
+      user: req.session,
+    });
+  } catch (error) {
+    console.error("Error loading sender emails:", error);
+    res.status(500).render("error", {
+      error: "Failed to load sender emails: " + error.message,
+      user: req.session,
+    });
+  }
+});
+
+// Add sender email
+router.post("/settings/brands/:id/sender-emails", (req, res) => {
+  try {
+    const { email, from_name, daily_limit } = req.body;
+
+    if (!email) {
+      return res.status(400).render("error", {
+        error: "Email is required",
+        user: req.session,
+      });
+    }
+
+    BrandSenderEmailRepo.create({
+      brand_id: req.params.id,
+      email,
+      from_name: from_name || null,
+      daily_limit: daily_limit ? parseInt(daily_limit) : 20,
+    });
+
+    res.redirect(`/settings/brands/${req.params.id}/sender-emails`);
+  } catch (error) {
+    console.error("Error adding sender email:", error);
+    res.status(500).render("error", {
+      error: "Failed to add sender email: " + error.message,
+      user: req.session,
+    });
+  }
+});
+
+// Test SMTP connection for sender email
+router.post("/settings/sender-emails/:id/test", async (req, res) => {
+  try {
+    console.log('=== SMTP TEST DEBUG ===');
+    console.log('Headers:', req.headers['content-type']);
+    console.log('Body:', req.body);
+
+    const { smtp_host, smtp_port, smtp_secure, smtp_user, smtp_password } = req.body || {};
+
+    // Validate required fields
+    if (!smtp_host || !smtp_user || !smtp_password) {
+      console.log('Missing required fields:', { smtp_host: !!smtp_host, smtp_user: !!smtp_user, smtp_password: !!smtp_password });
+      return res.json({
+        success: false,
+        message: "SMTP Host, User, and Password are required"
+      });
+    }
+
+    // Create a temporary transporter to test
+    const nodemailer = await import('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host: smtp_host,
+      port: parseInt(smtp_port) || 587,
+      secure: smtp_secure === "true" || smtp_secure === true || smtp_secure === 1,
+      auth: {
+        user: smtp_user,
+        pass: smtp_password,
+      },
+    });
+
+    console.log('Testing connection to:', smtp_host, smtp_port);
+    await transporter.verify();
+    console.log('Connection successful!');
+
+    res.json({
+      success: true,
+      message: "SMTP connection successful! Your configuration is working."
+    });
+  } catch (error) {
+    console.error('SMTP test failed:', error.message);
+    res.json({
+      success: false,
+      message: `Connection failed: ${error.message}`
+    });
+  }
+});
+
+// Update sender email
+router.post("/settings/sender-emails/:id/update", (req, res) => {
+  try {
+    // Handle case where req.body might be undefined
+    if (!req.body) {
+      return res.status(400).json({ error: "Request body is required" });
+    }
+
+    const {
+      email,
+      from_name,
+      is_active,
+      daily_limit,
+      smtp_host,
+      smtp_port,
+      smtp_secure,
+      smtp_user,
+      smtp_password
+    } = req.body || {};
+
+    // Get current record
+    const current = BrandSenderEmailRepo.getById(req.params.id);
+
+    if (!current) {
+      return res.status(404).json({ error: "Sender email not found" });
+    }
+
+    // Build update data - only include fields that have actual values
+    const updateData = {};
+
+    // Basic fields - always include if provided
+    if (email !== undefined && email !== '') {
+      updateData.email = email;
+    }
+    if (from_name !== undefined) {
+      updateData.from_name = from_name || null;
+    }
+    if (is_active !== undefined) {
+      updateData.is_active = is_active === "true" || is_active === true || is_active === 1;
+    }
+    if (daily_limit !== undefined && daily_limit !== '') {
+      updateData.daily_limit = daily_limit ? parseInt(daily_limit) : null;
+    }
+
+    // SMTP fields - validate and include
+    // Check if any SMTP field is provided (partial config attempt)
+    const hasAnySmtp = smtp_host || smtp_user || smtp_password;
+
+    if (hasAnySmtp) {
+      // If attempting to configure SMTP, require all fields
+      if (!smtp_host || smtp_host.trim() === '') {
+        return res.redirect(`/settings/brands/${current.brand_id}/sender-emails?error=smtp_host_required`);
+      }
+      if (!smtp_user || smtp_user.trim() === '') {
+        return res.redirect(`/settings/brands/${current.brand_id}/sender-emails?error=smtp_user_required`);
+      }
+      if (!smtp_password || smtp_password.trim() === '') {
+        return res.redirect(`/settings/brands/${current.brand_id}/sender-emails?error=smtp_password_required`);
+      }
+
+      updateData.smtp_host = smtp_host;
+      updateData.smtp_port = smtp_port ? parseInt(smtp_port) : 587;
+      updateData.smtp_secure = smtp_secure === "true" || smtp_secure === true || smtp_secure === 1;
+      updateData.smtp_user = smtp_user;
+      updateData.smtp_password = smtp_password;
+    }
+
+    BrandSenderEmailRepo.update(req.params.id, updateData);
+
+    // Get brand_id to redirect back
+    const senderEmail = BrandSenderEmailRepo.getById(req.params.id);
+    if (senderEmail) {
+      res.redirect(`/settings/brands/${senderEmail.brand_id}/sender-emails`);
+    } else {
+      res.redirect("/settings/brands");
+    }
+  } catch (error) {
+    console.error("Error updating sender email:", error);
+    res.status(500).render("error", {
+      error: "Failed to update sender email: " + error.message,
+      user: req.session,
+    });
+  }
+});
+
+// Delete sender email
+router.post("/settings/sender-emails/:id/delete", (req, res) => {
+  try {
+    // Get brand_id before deleting
+    const senderEmail = BrandSenderEmailRepo.getById(req.params.id);
+    const brandId = senderEmail?.brand_id;
+
+    BrandSenderEmailRepo.delete(req.params.id);
+
+    if (brandId) {
+      res.redirect(`/settings/brands/${brandId}/sender-emails`);
+    } else {
+      res.redirect("/settings/brands");
+    }
+  } catch (error) {
+    console.error("Error deleting sender email:", error);
+    res.status(500).render("error", {
+      error: "Failed to delete sender email: " + error.message,
+      user: req.session,
     });
   }
 });

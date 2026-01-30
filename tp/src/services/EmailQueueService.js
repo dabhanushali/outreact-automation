@@ -1,19 +1,123 @@
 import EmailQueueRepo from '../repositories/EmailQueueRepo.js';
 import TemplateService from './TemplateService.js';
+import BrandSenderEmailRepo from '../repositories/BrandSenderEmailRepo.js';
 import { db } from '../database/db.js';
+import fs from 'fs';
+import path from 'path';
 
 class EmailQueueService {
   /**
+   * Get the path to the round-robin tracker file
+   */
+  static getTrackerFilePath() {
+    return path.join(process.cwd(), 'sender-rotation-tracker.json');
+  }
+
+  /**
+   * Get current rotation index from tracker file
+   */
+  static getRotationIndex() {
+    try {
+      const trackerPath = this.getTrackerFilePath();
+      if (fs.existsSync(trackerPath)) {
+        const data = JSON.parse(fs.readFileSync(trackerPath, 'utf8'));
+        return data.index || 0;
+      }
+    } catch (error) {
+      console.error('Error reading rotation tracker:', error.message);
+    }
+    return 0;
+  }
+
+  /**
+   * Save rotation index to tracker file
+   */
+  static saveRotationIndex(index) {
+    try {
+      const trackerPath = this.getTrackerFilePath();
+      fs.writeFileSync(trackerPath, JSON.stringify({ index }, null, 2));
+    } catch (error) {
+      console.error('Error saving rotation tracker:', error.message);
+    }
+  }
+
+  /**
+   * Get all active sender emails across all brands (with SMTP configured)
+   */
+  static getAllActiveSenders() {
+    const query = `
+      SELECT bse.id, bse.email, bse.from_name, bse.brand_id, b.name as brand_name,
+             bse.smtp_host, bse.smtp_port, bse.smtp_secure, bse.smtp_user, bse.smtp_password,
+             bse.daily_limit
+      FROM brand_sender_emails bse
+      JOIN brands b ON bse.brand_id = b.id
+      WHERE bse.is_active = 1
+        AND bse.smtp_host IS NOT NULL
+        AND bse.smtp_host != ''
+      ORDER BY bse.id ASC
+    `;
+    return db.prepare(query).all();
+  }
+
+  /**
+   * Get next sender using global round-robin across all brands
+   * Follow-ups still use parent's sender for consistency
+   */
+  static getSenderEmail(brandId, emailCategory, parentLogId = null) {
+    // For follow-ups, get sender from parent log
+    if (emailCategory.startsWith('followup_') && parentLogId) {
+      const parentLog = db.prepare(
+        'SELECT sender_email FROM outreach_logs WHERE id = ?'
+      ).get(parentLogId);
+
+      if (parentLog?.sender_email) {
+        return parentLog.sender_email;
+      }
+    }
+
+    // For main emails, use global round-robin across all brands
+    const allSenders = this.getAllActiveSenders();
+
+    if (allSenders.length === 0) {
+      throw new Error('No active sender emails with SMTP configuration found. Please add and configure sender emails in Brand Settings.');
+    }
+
+    // Get current index and select sender
+    const currentIndex = this.getRotationIndex();
+    const selectedSender = allSenders[currentIndex];
+
+    // Calculate next index (wrap around)
+    const nextIndex = (currentIndex + 1) % allSenders.length;
+    this.saveRotationIndex(nextIndex);
+
+    console.log(`🔄 Round-robin sender: ${selectedSender.email} (Brand: ${selectedSender.brand_name}, Index: ${currentIndex + 1}/${allSenders.length})`);
+
+    return selectedSender.email;
+  }
+
+  /**
    * Queue single email
    */
-  static queueEmail(leadId, emailId, templateId, brandId, scheduledFor = null) {
+  static queueEmail(leadId, emailId, templateId, brandId, scheduledFor = null, parentLogId = null) {
     try {
+      // Get template to check email_category
+      const template = db.prepare(
+        'SELECT email_category FROM email_templates WHERE id = ?'
+      ).get(templateId);
+
+      const emailCategory = template?.email_category || 'main';
+
+      // Select sender email based on category
+      const senderEmail = this.getSenderEmail(brandId, emailCategory, parentLogId);
+
       // Prepare email with template
       const emailData = TemplateService.prepareEmail(templateId, leadId, emailId);
 
-      // Add to queue
+      // Add to queue with sender_email
       const result = EmailQueueRepo.addToQueue({
         brand_id: brandId,
+        sender_email: senderEmail,
+        parent_log_id: parentLogId,
         ...emailData,
         scheduled_for: scheduledFor,
       });

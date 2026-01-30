@@ -47,10 +47,9 @@ let content = `
             <table class="table table-hover">
               <thead>
                 <tr>
-                  <th>ID</th>
                   <th>Name</th>
                   <th>Website</th>
-                  <th>SMTP Status</th>
+                  <th>Sender Emails</th>
                   <th>Campaigns</th>
                   <th>Created</th>
                   <th>Actions</th>
@@ -59,40 +58,39 @@ let content = `
               <tbody>
 ${brands.map(brand => `
                 <tr>
-                  <td>${brand.id}</td>
                   <td><strong>${brand.name}</strong></td>
                   <td>${brand.website ? `<a href="${brand.website}" target="_blank">${brand.website}</a>` : '-'}</td>
                   <td>
-${brand.smtp_is_active && brand.smtp_host ? `
-                    <span class="badge bg-success">
-                      <i class="bi bi-envelope"></i> Active
-                    </span>` : brand.smtp_host ? `
-                    <span class="badge bg-warning">
-                      <i class="bi bi-envelope"></i> Configured
-                    </span>` : `
-                    <span class="badge bg-secondary">
-                      <i class="bi bi-dash-circle"></i> Not Set
-                    </span>`}
+                    <a href="/settings/brands/${brand.id}/sender-emails" class="text-decoration-none">
+                      <span class="badge bg-${brand.sender_emails_count > 0 ? 'primary' : 'secondary'}">
+                        <i class="bi bi-envelope"></i> ${brand.sender_emails_count || 0}
+                      </span>
+                    </a>
                   </td>
                   <td><span class="badge bg-info">${brand.campaign_count || 0}</span></td>
                   <td>${new Date(brand.created_at).toLocaleDateString()}</td>
                   <td>
-                    <a href="/settings/brands/${brand.id}/edit" class="btn btn-sm btn-outline-primary">
-                      <i class="bi bi-pencil"></i>
-                    </a>
-                    <form method="POST" action="/settings/brands/${brand.id}/delete"
-                      onsubmit="return confirm('Delete brand \"${brand.name}\"?${(brand.campaign_count || 0) > 0 ? ` This will also delete ${brand.campaign_count} associated campaign(s).` : ''}');"
-                      style="display: inline;">
-                      <button class="btn btn-sm btn-outline-danger" title="${(brand.campaign_count || 0) > 0 ? `Delete with ${brand.campaign_count} campaigns` : 'Delete brand'}">
-                        <i class="bi bi-trash"></i>
-                      </button>
-                    </form>
+                    <div class="btn-group btn-group-sm">
+                      <a href="/settings/brands/${brand.id}/sender-emails" class="btn btn-outline-success" title="Manage Sender Emails">
+                        <i class="bi bi-envelope-plus"></i>
+                      </a>
+                      <a href="/settings/brands/${brand.id}/edit" class="btn btn-outline-primary" title="Edit Brand">
+                        <i class="bi bi-pencil"></i>
+                      </a>
+                      <form method="POST" action="/settings/brands/${brand.id}/delete"
+                        onsubmit="return confirm('Delete brand \"${brand.name}\"?${(brand.campaign_count || 0) > 0 ? ` This will also delete ${brand.campaign_count} associated campaign(s).` : ''}');"
+                        style="display: inline;">
+                        <button class="btn btn-outline-danger" title="${(brand.campaign_count || 0) > 0 ? `Delete with ${brand.campaign_count} campaigns` : 'Delete brand'}">
+                          <i class="bi bi-trash"></i>
+                        </button>
+                      </form>
+                    </div>
                   </td>
                 </tr>`).join('')}
 
 ${brands.length === 0 ? `
                 <tr>
-                  <td colspan="7" class="text-center text-muted py-4">No brands found.</td>
+                  <td colspan="6" class="text-center text-muted py-4">No brands found.</td>
                 </tr>` : ''}
               </tbody>
             </table>

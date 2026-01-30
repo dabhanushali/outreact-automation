@@ -176,7 +176,7 @@ ${leads.map(lead => {
 
                   return `
                   <tr>
-                    <td><input type="checkbox" name="lead_ids" value="${lead.id}" data-email-id="${lead.email_id}"></td>
+                    <td><input type="checkbox" name="lead_ids" value="${lead.id}" data-email-id="${lead.email_id}" data-brand-id="${lead.brand_id}"></td>
                     <td><a href="https://${lead.domain}" target="_blank">${lead.domain}</a></td>
                     <td>${lead.blog_name || '-'}</td>
                     <td>${lead.email ? `<a href="mailto:${lead.email}">${lead.email}</a>` : '-'}</td>
@@ -280,29 +280,40 @@ function submitToQueue() {
   const selected = document.querySelectorAll('input[name="lead_ids"]:checked');
   const leadIds = [];
   const emailIds = [];
-  
+  let brandId = null;
+
   selected.forEach(cb => {
     if (cb.dataset.emailId) {
       leadIds.push(cb.value);
       emailIds.push(cb.dataset.emailId);
     }
+    // Get brand_id from first selected item
+    if (!brandId && cb.dataset.brandId) {
+      brandId = cb.dataset.brandId;
+    }
   });
-  
+
   const templateId = document.querySelector('#queueForm select[name="template_id"]').value;
   if (!templateId) {
     alert('Please select a template');
     return;
   }
-  
+
+  if (!brandId) {
+    alert('Error: Unable to determine brand. Please ensure leads are associated with a campaign.');
+    return;
+  }
+
   const btn = document.querySelector('#addToQueueModal .btn-primary');
   const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Processing...';
-  
+
   fetch('/email-outreach/queue/add', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
+      brand_id: brandId,
       lead_ids: leadIds,
       email_ids: emailIds,
       template_id: templateId
@@ -335,7 +346,24 @@ function updateStatus(leadId, status) {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
     body: 'status=' + status
-  }).then(() => location.reload());
+  })
+  .then(res => {
+    if (res.ok) {
+      return res.json();
+    }
+    throw new Error('Failed to update status');
+  })
+  .then(data => {
+    if (data.success) {
+      location.reload();
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(err => {
+    console.error('Error updating status:', err);
+    alert('Failed to update status. Please try again.');
+  });
 }
 
 function toggleFilters() {

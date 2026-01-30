@@ -13,7 +13,11 @@
       "mcp__playwright__browser_run_code",
       "Bash(ls:*)",
       "Bash(del:*)",
-      "Bash(npm start)"
+      "Bash(npm start)",
+      "mcp__playwright-extension__browser_snapshot",
+      "mcp__playwright-extension__browser_evaluate",
+      "mcp__playwright-extension__browser_take_screenshot",
+      "mcp__playwright-extension__browser_click"
     ]
   }
 }

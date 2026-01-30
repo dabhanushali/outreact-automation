@@ -126,6 +126,7 @@ router.get("/leads", (req, res) => {
         bp.domain,
         bp.blog_name,
         c.name as campaign_name,
+        c.brand_id,
         b.name as brand_name,
         be.email,
         be.id as email_id,
@@ -311,13 +312,11 @@ router.post("/leads/:id/status", (req, res) => {
       stmt.run(status, id);
     }
 
-    res.redirect(req.headers.referer || "/leads");
+    // Return JSON response for AJAX requests
+    res.json({ success: true });
   } catch (error) {
     console.error("Error updating lead status:", error);
-    res.status(500).render("error", {
-      error: "Failed to update lead status: " + error.message,
-      user: req.session,
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

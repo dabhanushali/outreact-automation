@@ -623,6 +623,101 @@ function migrateDatabase() {
     console.log("  ✓ search_queries migration complete");
   }
 
+  // === MIGRATION: Multiple Sender Emails per Brand ===
+  // Check if brand_sender_emails table exists
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='brand_sender_emails'").all();
+  if (tables.length === 0) {
+    console.log("  → Adding brand_sender_emails table for multiple sender support");
+    db.exec(`
+      CREATE TABLE brand_sender_emails (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        brand_id INTEGER NOT NULL,
+        email TEXT NOT NULL,
+        from_name TEXT,
+        is_active INTEGER DEFAULT 1,
+        daily_limit INTEGER DEFAULT 20,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+        UNIQUE (brand_id, email)
+      )
+    `);
+
+    // Create indexes
+    db.exec("CREATE INDEX IF NOT EXISTS idx_brand_sender_emails_brand ON brand_sender_emails(brand_id)");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_brand_sender_emails_active ON brand_sender_emails(is_active)");
+
+    // Add sender_email column to email_queue if not exists
+    const emailQueueCols = db.prepare("PRAGMA table_info(email_queue)").all();
+    if (!emailQueueCols.some(col => col.name === 'sender_email')) {
+      console.log("  → Adding sender_email column to email_queue");
+      db.exec("ALTER TABLE email_queue ADD COLUMN sender_email TEXT");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_email_queue_sender ON email_queue(sender_email)");
+    }
+
+    // Add sender_email column to outreach_logs if not exists
+    const outreachLogsCols = db.prepare("PRAGMA table_info(outreach_logs)").all();
+    if (!outreachLogsCols.some(col => col.name === 'sender_email')) {
+      console.log("  → Adding sender_email column to outreach_logs");
+      db.exec("ALTER TABLE outreach_logs ADD COLUMN sender_email TEXT");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_outreach_logs_sender ON outreach_logs(sender_email)");
+    }
+
+    // Migrate existing brands: copy current smtp_from_email to brand_sender_emails
+    console.log("  → Migrating existing brand SMTP emails to brand_sender_emails");
+    db.exec(`
+      INSERT OR IGNORE INTO brand_sender_emails (brand_id, email, from_name)
+      SELECT id, smtp_from_email, smtp_from_name
+      FROM brands
+      WHERE smtp_from_email IS NOT NULL
+        AND smtp_from_email != ''
+        AND NOT EXISTS (
+          SELECT 1 FROM brand_sender_emails
+          WHERE brand_sender_emails.brand_id = brands.id
+          AND brand_sender_emails.email = brands.smtp_from_email
+        )
+    `);
+
+    console.log("  ✓ Multiple sender emails migration complete");
+  } else {
+    // Table exists, check if we need to add SMTP columns
+    const bseColumns = db.prepare("PRAGMA table_info(brand_sender_emails)").all();
+    const bseColumnNames = bseColumns.map(col => col.name);
+
+    // Add SMTP columns if they don't exist
+    if (!bseColumnNames.includes('smtp_host')) {
+      console.log("  → Adding SMTP columns to brand_sender_emails");
+
+      if (!bseColumnNames.includes('smtp_host')) {
+        db.exec("ALTER TABLE brand_sender_emails ADD COLUMN smtp_host TEXT");
+      }
+      if (!bseColumnNames.includes('smtp_port')) {
+        db.exec("ALTER TABLE brand_sender_emails ADD COLUMN smtp_port INTEGER DEFAULT 587");
+      }
+      if (!bseColumnNames.includes('smtp_secure')) {
+        db.exec("ALTER TABLE brand_sender_emails ADD COLUMN smtp_secure INTEGER DEFAULT 0");
+      }
+      if (!bseColumnNames.includes('smtp_user')) {
+        db.exec("ALTER TABLE brand_sender_emails ADD COLUMN smtp_user TEXT");
+      }
+      if (!bseColumnNames.includes('smtp_password')) {
+        db.exec("ALTER TABLE brand_sender_emails ADD COLUMN smtp_password TEXT");
+      }
+
+      // Copy SMTP config from brand to all sender emails that don't have SMTP set
+      db.exec(`
+        UPDATE brand_sender_emails
+        SET smtp_host = (SELECT smtp_host FROM brands WHERE id = brand_sender_emails.brand_id),
+            smtp_port = (SELECT smtp_port FROM brands WHERE id = brand_sender_emails.brand_id),
+            smtp_secure = (SELECT smtp_secure FROM brands WHERE id = brand_sender_emails.brand_id),
+            smtp_user = (SELECT smtp_user FROM brands WHERE id = brand_sender_emails.brand_id),
+            smtp_password = (SELECT smtp_password FROM brands WHERE id = brand_sender_emails.brand_id)
+        WHERE smtp_host IS NULL
+      `);
+
+      console.log("  ✓ SMTP columns added to brand_sender_emails");
+    }
+  }
+
   console.log("Database migrations complete ✅");
 }
 
